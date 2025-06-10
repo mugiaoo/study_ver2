@@ -116,7 +116,6 @@ def main():
     try:
         while True:
             ch = get_key()
-
             # ESCキー（27）なら終了
             if ord(ch) == 27:
                 print("\n[終了] ESCが押されました。終了します。")
@@ -130,7 +129,7 @@ def main():
                 # 半角化＆漢数字変換
                 tag_candidate = convert_full_and_kanji_to_halfwidth(tag_candidate)
 
-                # E2180から始まり長さ22か23かどうかチェック
+                # E2180か始まり長さ22か23かどうかチェック
                 if tag_candidate.startswith(TAG_PREFIX) and len(tag_candidate) in TAG_LENGTHS:
                     # タグの最終検出時刻を更新
                     tags_last_seen[tag_candidate] = time.time()
@@ -148,10 +147,10 @@ def main():
 
                     # ターミナルに表示（タイムスタンプ, ID, 商品名）
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    if name:
-                        print(f"{timestamp} | {tag_candidate} | {name}")
-                    else:
-                        print(f"{timestamp} | {tag_candidate} | Unknown")
+                    # if name:
+                    #     print(f"{timestamp} | {tag_candidate} | {name}")
+                    # else:
+                    #     print(f"{timestamp} | {tag_candidate} | Unknown")j
 
                     # 未検出（20秒以上前）の商品をused_items.csvに書く（重複は避ける）
                     in_use_names = server_result.get("in_use_names", [])
