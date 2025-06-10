@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>RFIDタグ登録</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 2em; }
+        input, select { margin-bottom: 1em; width: 300px; padding: 0.5em; }
+        table { border-collapse: collapse; margin-top: 2em; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>RFID タグ登録</h1>
+    
+    {% if message %}
+        <p><strong>{{ message }}</strong></p>
+    {% endif %}
+
+    <form method="POST" action="/register-ui">
+        <label for="tag_id">タグID ({{ VALID_TAG_LENGTHS }}桁):</label><br>
+        <input type="text" id="tag_id" name="tag_id" required maxlength="{{ VALID_TAG_LENGTHS }}"><br>
+
+        <label for="name">名前:</label><br>
+        <input type="text" id="name" name="name" required><br>
+
+        <label for="category">カテゴリ:</label><br>
+        <input type="text" id="category" name="category" required><br>
+
+        <button type="submit">登録</button>
+    </form>
+
+    <h2>登録済みタグ一覧</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>タグID</th>
+                <th>名前</th>
+                <th>カテゴリ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for tag in tags %}
+            <tr>
+                <td>{{ tag[0] }}</td>
+                <td>{{ tag[1] }}</td>
+                <td>{{ tag[2] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">まだタグは登録されていません。</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
