@@ -163,6 +163,62 @@ def get_tags():
     finally:
         conn.close()
 
+@app.route("/edit", methods=["POST"])
+def edit_tag():
+    tag_id = request.form.get("tag_id")
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT * FROM tags WHERE tag_id = ?", (tag_id,))
+    tag = c.fetchone()
+    conn.close()
+    if tag:
+        return render_template("edit.html", tag=tag, message="")
+    else:
+        return "指定されたタグが見つかりませんでした", 404
+
+@app.route("/update", methods=["POST"])
+def update_tag():
+    old_tag_id = request.form.get("old_tag_id")
+    new_tag_id = request.form.get("tag_id", "").strip()
+    name = request.form.get("name", "").strip()
+    category = request.form.get("category", "").strip()
+
+    if not new_tag_id or not name or not category:
+        return render_template("edit.html", tag=(old_tag_id, name, category), message="すべての項目を入力してください。")
+
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        c = conn.cursor()
+        # タグIDが変更された場合
+        if old_tag_id != new_tag_id:
+            c.execute("DELETE FROM tags WHERE tag_id = ?", (old_tag_id,))
+            c.execute("INSERT INTO tags (tag_id, name, category) VALUES (?, ?, ?)", (new_tag_id, name, category))
+        else:
+            c.execute("UPDATE tags SET name = ?, category = ? WHERE tag_id = ?", (name, category, old_tag_id))
+        conn.commit()
+        conn.close()
+        return register_ui()  # 編集完了後に登録画面に戻す
+    except sqlite3.IntegrityError:
+        return render_template("edit.html", tag=(old_tag_id, name, category), message="このタグIDはすでに存在します。")
+    except Exception as e:
+        return render_template("edit.html", tag=(old_tag_id, name, category), message=f"エラーが発生しました: {e}")
+
+@app.route("/delete", methods=["POST"])
+def delete_tag():
+    tag_id = request.form.get("tag_id")
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        c = conn.cursor()
+        c.execute("DELETE FROM tags WHERE tag_id = ?", (tag_id,))
+        conn.commit()
+        conn.close()
+        print(f"[削除] タグ {tag_id} を削除しました")
+        return register_ui()
+    except Exception as e:
+        print(f"[エラー] タグ削除中に問題が発生: {e}")
+        return f"削除中にエラーが発生しました: {e}", 500
+
+
 if __name__ == "__main__":
     init_db()
     print("[起動] Flaskサーバーを起動中... http://localhost:8000")
