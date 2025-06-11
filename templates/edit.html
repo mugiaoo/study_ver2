@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>タグ編集</title>
+</head>
+<body>
+    <h1>タグ編集</h1>
+
+    {% if message %}
+        <p><strong>{{ message }}</strong></p>
+    {% endif %}
+
+    <form method="POST" action="/update">
+        <input type="hidden" name="old_tag_id" value="{{ tag[0] }}">
+        <label>タグID:</label><br>
+        <input type="text" name="tag_id" value="{{ tag[0] }}" required><br>
+
+        <label>名前:</label><br>
+        <input type="text" name="name" value="{{ tag[1] }}" required><br>
+
+        <label>カテゴリ:</label><br>
+        <input type="text" name="category" value="{{ tag[2] }}" required><br>
+
+        <button type="submit">更新</button>
+    </form>
+
+    <p><a href="/register-ui">← 登録一覧に戻る</a></p>
+</body>
+</html>
