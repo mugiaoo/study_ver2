@@ -1,4 +1,3 @@
-/* 画面を時計回りに90度回転して縦表示 */
 body {
   transform: rotate(90deg);
   transform-origin: top left;
@@ -6,19 +5,24 @@ body {
   top: 0;
   left: 0;
 
-  width: 100vh;    /* 横幅を本来の高さに */
-  height: 100vw;   /* 高さを本来の横幅に */
+  width: 100vh;
+  height: 100vw;
 
   overflow: hidden;
-  zoom: 0.75; /* 拡大率調整、必要に応じて変更 */
-  padding-bottom: 100px; /* 下部余白を追加して、モジュールが切れないようにする */
+  zoom: 0.75;
+  padding: 0;
 }
 
-/* 上部中央モジュールの表示位置調整 */
+/* 上部中央（見た目）にモジュールを表示 */
 .region.top.center {
   position: absolute;
-  top: 20px;       /* 固定位置で上から20px */
   left: 0;
-  right: 0;
+  top: 0; /* ←これでは下に来るので... */
+
+  /* 修正ポイント：左方向に offset を加える */
+  transform: translateX(-100vw);
+  transform-origin: top left;
+
+  width: 100vw;
   text-align: center;
 }
