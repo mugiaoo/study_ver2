@@ -1,11 +1,21 @@
-/* 画面全体を時計回りに90度回転 */
+/* 画面を時計回りに90度回転して縦表示 */
 body {
-  transform-origin: top left;
   transform: rotate(90deg);
-  width: 100vh;  /* 画面幅を画面の高さ分に */
-  height: 100vw; /* 画面高さを画面の幅分に */
-  overflow-x: hidden;
+  transform-origin: top left;
   position: absolute;
   top: 0;
   left: 0;
+
+  width: 100vh;    /* 横幅を本来の高さに */
+  height: 100vw;   /* 高さを本来の横幅に */
+
+  overflow: hidden;
+  zoom: 0.75; /* 拡大率調整、必要に応じて変更 */
+  padding-bottom: 100px; /* 下部余白を追加して、モジュールが切れないようにする */
+}
+
+/* 上部中央モジュールの表示位置調整 */
+.region.top.center {
+  transform: translateY(40px);
+  text-align: center;
 }
