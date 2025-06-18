@@ -4,25 +4,20 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-
   width: 100vh;
   height: 100vw;
-
   overflow: hidden;
   zoom: 0.75;
+  margin: 0;
   padding: 0;
 }
 
-/* 上部中央（見た目）にモジュールを表示 */
+/* モジュール（例：clock）を中心に表示 */
 .region.top.center {
   position: absolute;
-  left: 0;
-  top: 0; /* ←これでは下に来るので... */
-
-  /* 修正ポイント：左方向に offset を加える */
-  transform: translateX(-100vw);
-  transform-origin: top left;
-
-  width: 100vw;
+  top: 50vw;      /* 回転後の縦方向の中央 */
+  left: 50vh;     /* 回転後の横方向の中央 */
+  transform: translate(-50%, -50%);  /* 中央揃え */
   text-align: center;
+  width: auto;
 }
