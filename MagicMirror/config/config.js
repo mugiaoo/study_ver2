@@ -51,7 +51,7 @@ let config = {
     module: "text",
     position: "top_center",
     config: {
-      text: "こんにちは！", // 表示したい文字
+      text: "こんにちは！これは自作textモジュールです", // 表示したい文字
       // text: "ここに任意のテキスト"
       // 自分で好きな文言に変えてください
       updateInterval: 60000, // 1分毎に更新（必要なければ省略可）
