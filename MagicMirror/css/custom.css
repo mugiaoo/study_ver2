@@ -16,6 +16,9 @@ body {
 
 /* 上部中央モジュールの表示位置調整 */
 .region.top.center {
-  transform: translateY(40px);
+  position: absolute;
+  top: 20px;       /* 固定位置で上から20px */
+  left: 0;
+  right: 0;
   text-align: center;
 }
