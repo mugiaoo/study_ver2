@@ -1,20 +1,26 @@
 Module.register("text", {
   defaults: {
-    text: "ここに任意のテキストを入れてください",
+    text: "こんにちは！",
     updateInterval: 60000
   },
 
-  start: function() {
-    this.text = this.config.text;
-    var self = this;
-    setInterval(function() {
-      self.updateDom();
-    }, this.config.updateInterval);
+  start() {
+    this.message = this.config.text;
+    if (this.config.updateInterval > 0) {
+      setInterval(() => {
+        this.updateDom();
+      }, this.config.updateInterval);
+    }
   },
 
-  getDom: function() {
-    var wrapper = document.createElement("div");
-    wrapper.innerHTML = this.text;
+  getDom() {
+    const wrapper = document.createElement("div");
+    wrapper.className = "text-content";
+    wrapper.innerText = this.message;
     return wrapper;
+  },
+
+  getStyles() {
+    return ["text.css"];
   }
 });
