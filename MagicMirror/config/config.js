@@ -41,7 +41,10 @@ let config = {
     module: "clock",
     position: "top_center", // 上部中央
     config: {
-      // 時計の表示設定は必要ならここに
+      timeFormat: 24,
+        displaySeconds: true,
+        showDate: true,
+        dateFormat: "YYYY年MM月DD日 dddd"
     }
   },
   {
