@@ -41,17 +41,20 @@ let config = {
     module: "clock",
     position: "top_center", // 上部中央
     config: {
-      // 時計の表示設定は必要ならここに
+      timeFormat: 24,
+        displaySeconds: true,
+        showDate: true,
+        dateFormat: "YYYY年MM月DD日 dddd"
     }
   },
   {
     module: "text",
     position: "top_center",
     config: {
-      text: "こんにちは！", // 表示したい文字
+      text: "こんにちは！これは自作textモジュールです", // 表示したい文字
       // text: "ここに任意のテキスト"
       // 自分で好きな文言に変えてください
-      updateInterval: 60000, // 1分毎に更新（必要なければ省略可）
+      //updateInterval: 60000, // 1分毎に更新（必要なければ省略可）
     }
   },
   // 他のモジュール…
