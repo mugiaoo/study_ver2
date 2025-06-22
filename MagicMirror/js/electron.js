@@ -4,9 +4,6 @@ const electron = require("electron");
 const core = require("./app");
 const Log = require("./logger");
 
-// 追加（この2行を先頭近くに入れる）
-app.commandLine.appendSwitch("disable-gpu");
-app.commandLine.appendSwitch("disable-software-rasterizer");
 
 // Config
 let config = process.env.config ? JSON.parse(process.env.config) : {};
