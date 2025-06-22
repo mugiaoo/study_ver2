@@ -62,6 +62,8 @@ Temporary Items
 !/modules/default
 !/modules/default/**
 !/modules/README.md**
+!modules/text/
+!modules/text/text.js
 
 # Ignore changes to the custom css files.
 !/css/custom.css
