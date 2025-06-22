@@ -1,10 +1,11 @@
 body {
-  transform: rotate(90deg);
-  transform-origin: top left;
-  width: 100vh;
+  margin: 0;
+  width: 100vh;   /* 横幅と高さを入れ替え */
   height: 100vw;
   overflow: hidden;
+  transform: rotate(90deg);
+  transform-origin: top left;
   position: absolute;
-  top: 100%;
-  left: 0;
+  top: 0;
+  left: -100vh;  /* ここが重要、画面内に戻すため左に高さ分だけ移動 */
 }
