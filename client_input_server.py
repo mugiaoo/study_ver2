@@ -113,6 +113,19 @@ def initialize_detected_tags_csv():
     except Exception as e:
         print(f"[エラー] 初期化中にエラーが発生: {e}")
         return {}
+    
+def send_feedback(message="💄 今日も化粧してえらい！！"):
+    try:
+        url = "http://localhost:8080/feedback"
+        data = {"message": message}
+        response = requests.post(url, json=data, timeout=3)
+        if response.status_code == 200:
+            print("[送信成功] フィードバック送信:", message)
+        else:
+            print(f"[送信失敗] ステータスコード: {response.status_code}")
+    except Exception as e:
+        print(f"[送信エラー] フィードバック送信中に例外発生: {e}")
+
 
 def main():
     initialize_used_csvs()
@@ -171,7 +184,9 @@ def main():
                     for name in inactive_names:
                         for t_id, info in known_tags.items():
                             if info["name"] == name and info.get("category") == "リップ":
-                                print("💄 今日も化粧してえらい！！")
+                                message = "💄 今日も化粧してえらい！！"
+                                print(message)
+                                send_feedback(message)  # ← ここを追加
                                 break
 
             else:

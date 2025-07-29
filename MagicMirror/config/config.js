@@ -20,7 +20,14 @@ let config = {
         text: "こんにちは、スマートミラーへようこそ！",
         // もっとカスタムしたければmoduleのjsやcssを編集も可能
       }
-    }
+    },
+    {
+  module: "MMM-RFIDFeedback",
+  position: "middle_center",
+  config: {
+    duration: 10000
+  }
+},
   ]
 };
 
