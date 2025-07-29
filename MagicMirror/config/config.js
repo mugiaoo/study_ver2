@@ -22,7 +22,7 @@ let config = {
       }
     },
     {
-  module: "MMM-FeedbackDisplay",
+  module: "MMM-RFIDFeedback",
   position: "top_center",
   config: {
     endpoint: "http://localhost:8000/feedback",  
