@@ -109,7 +109,7 @@ def initialize_detected_tags_csv():
 
 def send_feedback(message="💄 今日も化粧してえらい！！"):
     try:
-        url = "http://localhost:/feedback"
+        url = "http://localhost:8000/feedback"
         response = requests.post(url, json={"message": message}, timeout=3)
         if response.status_code == 200:
             print("[送信成功] フィードバック送信:", message)

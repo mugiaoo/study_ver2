@@ -2,7 +2,7 @@ Module.register("MMM-FeedbackDisplay", {
   defaults: {
     duration: 10000,
     endpoint: "http://localhost:8000/feedback",
-    updateInterval: 10000  // デフォルト更新間隔
+    updateInterval: 10000
   },
 
   start: function () {
@@ -23,13 +23,26 @@ Module.register("MMM-FeedbackDisplay", {
     return wrapper;
   },
 
+  socketNotificationReceived: function (notification, payload) {
+    if (notification === "SHOW_FEEDBACK") {
+      this.message = payload;
+      this.updateDom();
+
+      if (this.hideTimer) clearTimeout(this.hideTimer);
+      this.hideTimer = setTimeout(() => {
+        this.message = null;
+        this.updateDom();
+      }, this.config.duration);
+    }
+  },
+
   getFeedback: function () {
     fetch(this.config.endpoint)
       .then(response => {
         if (!response.ok) {
           throw new Error("Network response was not ok");
         }
-        return response.json();  // Flask からは JSON が返る前提
+        return response.json();
       })
       .then(data => {
         if (data && data.message) {
@@ -44,7 +57,7 @@ Module.register("MMM-FeedbackDisplay", {
         }
       })
       .catch(error => {
-        console.error("[送信エラー] フィードバック取得中に例外発生:", error);
+        console.error("[取得エラー] フィードバック取得中に例外発生:", error);
       });
   }
 });

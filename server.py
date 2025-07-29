@@ -235,6 +235,10 @@ def receive_feedback():
 
     return jsonify({"status": "received"})
 
+@app.route("/feedback", methods=["GET"])
+def get_feedback():
+    return jsonify(latest_feedback_message)
+
 
 if __name__ == "__main__":
     init_db()
