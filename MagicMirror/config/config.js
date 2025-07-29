@@ -23,7 +23,7 @@ let config = {
     },
     {
   module: "MMM-FeedbackDisplay",
-  position: "top_right",
+  position: "top_center",
   config: {
     endpoint: "http://localhost:8000/feedback",  
     updateInterval: 10000
