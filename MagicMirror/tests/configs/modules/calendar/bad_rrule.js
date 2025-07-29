@@ -10,7 +10,7 @@ let config = {
 			config: {
 				calendars: [
 					{
-						url: "http://localhost:8080/tests/mocks/bad_rrule.ics"
+						url: "http://localhost:8000/tests/mocks/bad_rrule.ics"
 					}
 				]
 			}

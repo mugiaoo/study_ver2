@@ -19,7 +19,7 @@ let config = {
 				calendars: [
 					{
 						maximumEntries: 100,
-						url: "http://localhost:8080/tests/mocks/RepeatingEvent.Oct21.ics"
+						url: "http://localhost:8000/tests/mocks/RepeatingEvent.Oct21.ics"
 					}
 				]
 			}

@@ -9,13 +9,13 @@ describe("App environment", () => {
 		await helpers.stopApplication();
 	});
 
-	it("get request from http://localhost:8080 should return 200", async () => {
-		const res = await fetch("http://localhost:8080");
+	it("get request from http://localhost:8000 should return 200", async () => {
+		const res = await fetch("http://localhost:8000");
 		expect(res.status).toBe(200);
 	});
 
-	it("get request from http://localhost:8080/nothing should return 404", async () => {
-		const res = await fetch("http://localhost:8080/nothing");
+	it("get request from http://localhost:8000/nothing should return 404", async () => {
+		const res = await fetch("http://localhost:8000/nothing");
 		expect(res.status).toBe(404);
 	});
 

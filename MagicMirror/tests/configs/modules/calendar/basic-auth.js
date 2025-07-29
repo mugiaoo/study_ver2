@@ -11,7 +11,7 @@ let config = {
 				calendars: [
 					{
 						maximumNumberOfDays: 10000,
-						url: "http://localhost:8080/tests/mocks/calendar_test.ics",
+						url: "http://localhost:8000/tests/mocks/calendar_test.ics",
 						auth: {
 							user: "MagicMirror",
 							pass: "CallMeADog",

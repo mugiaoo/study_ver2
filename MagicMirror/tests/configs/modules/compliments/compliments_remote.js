@@ -6,7 +6,7 @@ let config = {
 			module: "compliments",
 			position: "middle_center",
 			config: {
-				remoteFile: "http://localhost:8080/tests/mocks/compliments_test.json"
+				remoteFile: "http://localhost:8000/tests/mocks/compliments_test.json"
 			}
 		}
 	]

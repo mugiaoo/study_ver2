@@ -7,7 +7,7 @@ let config = {
 			position: "bottom_bar",
 			config: {
 				updateInterval: 3000,
-				remoteFile: "http://localhost:8080/tests/mocks/compliments_test.json"
+				remoteFile: "http://localhost:8000/tests/mocks/compliments_test.json"
 			}
 		}
 	]

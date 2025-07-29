@@ -14,7 +14,7 @@ let config = {
 					{
 						maximumEntries: 100,
 						maximumNumberOfDays: 1, // Just today
-						url: "http://localhost:8080/tests/mocks/rrule_until.ics"
+						url: "http://localhost:8000/tests/mocks/rrule_until.ics"
 					}
 				]
 			}

@@ -19,7 +19,7 @@ let config = {
 						symbol: "birthday-cake",
 						fullDaySymbol: "calendar-day",
 						recurringSymbol: "undo",
-						url: "http://localhost:8080/tests/mocks/calendar_test_icons.ics"
+						url: "http://localhost:8000/tests/mocks/calendar_test_icons.ics"
 					}
 				]
 			}

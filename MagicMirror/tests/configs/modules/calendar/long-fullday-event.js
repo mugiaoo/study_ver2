@@ -17,7 +17,7 @@ let config = {
 				calendars: [
 					{
 						maximumNumberOfDays: 2,
-						url: "http://localhost:8080/tests/mocks/calendar_test_multi_day_starting_today.ics"
+						url: "http://localhost:8000/tests/mocks/calendar_test_multi_day_starting_today.ics"
 					}
 				]
 			}

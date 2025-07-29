@@ -21,7 +21,7 @@ let config = {
 				calendars: [
 					{
 						maximumEntries: 100,
-						url: "http://localhost:8080/tests/mocks/3_move_first_allday_repeating_event.ics"
+						url: "http://localhost:8000/tests/mocks/3_move_first_allday_repeating_event.ics"
 					}
 				]
 			}

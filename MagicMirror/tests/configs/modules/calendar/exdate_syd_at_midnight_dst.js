@@ -22,7 +22,7 @@ let config = {
 					{
 						maximumEntries: 100,
 						maximumNumberOfDays: 28, // 4 weeks, 2 of which are skipped
-						url: "http://localhost:8080/tests/mocks/exdate_syd_at_midnight_dst.ics"
+						url: "http://localhost:8000/tests/mocks/exdate_syd_at_midnight_dst.ics"
 					}
 				]
 			}

@@ -1,6 +1,6 @@
 let config = {
   address: "localhost",
-  port: 8080,
+  port: 8000,
   basePath: "/",
   ipWhitelist: [],  // ローカルからだけアクセス可能
 
@@ -25,7 +25,7 @@ let config = {
   module: "MMM-FeedbackDisplay",
   position: "top_right",
   config: {
-    endpoint: "http://localhost:8080/feedback",  
+    endpoint: "http://localhost:8000/feedback",  
     updateInterval: 10000
   }
 }

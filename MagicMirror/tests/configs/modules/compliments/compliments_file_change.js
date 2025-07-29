@@ -8,8 +8,8 @@ let config = {
 			config: {
 				updateInterval: 3000,
 				remoteFileRefreshInterval: 1500,
-				remoteFile: "http://localhost:8080/tests/mocks/compliments_test.json",
-				remoteFile2: "http://localhost:8080/tests/mocks/compliments_file.json"
+				remoteFile: "http://localhost:8000/tests/mocks/compliments_test.json",
+				remoteFile2: "http://localhost:8000/tests/mocks/compliments_file.json"
 			}
 		}
 	]

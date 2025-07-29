@@ -238,5 +238,5 @@ def receive_feedback():
 
 if __name__ == "__main__":
     init_db()
-    print("[起動] Flaskサーバーを起動中... http://localhost:8080")
-    app.run(host="0.0.0.0", port=8080)
+    print("[起動] Flaskサーバーを起動中... http://localhost:8000")
+    app.run(host="0.0.0.0", port=8000)

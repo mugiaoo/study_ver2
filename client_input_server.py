@@ -49,7 +49,7 @@ def convert_full_and_kanji_to_halfwidth(s):
 
 def fetch_tags():
     try:
-        res = requests.get("http://localhost:8080/tags", timeout=3)
+        res = requests.get("http://localhost:8000/tags", timeout=3)
         if res.status_code == 200:
             return {
                 t["tag_id"]: {"name": t["name"], "category": t.get("category", "")}
@@ -91,7 +91,7 @@ def save_to_used_all_csv(names):
 
 def initialize_detected_tags_csv():
     try:
-        response = requests.get("http://localhost:8080/tags", timeout=3)
+        response = requests.get("http://localhost:8000/tags", timeout=3)
         if response.status_code != 200:
             print("[警告] サーバーからタグ一覧を取得できませんでした。")
             return {}

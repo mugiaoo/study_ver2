@@ -14,7 +14,7 @@ let config = {
 					{
 						fetchInterval: 10000, //7 * 24 * 60 * 60 * 1000,
 						symbol: ["calendar-check", "google"],
-						url: "http://localhost:8080/tests/mocks/12_events.ics"
+						url: "http://localhost:8000/tests/mocks/12_events.ics"
 					}
 				]
 			}

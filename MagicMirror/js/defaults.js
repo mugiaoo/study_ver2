@@ -1,7 +1,7 @@
 /* global mmPort */
 
 const address = "localhost";
-let port = 8080;
+let port = 8000;
 if (typeof mmPort !== "undefined") {
 	port = mmPort;
 }

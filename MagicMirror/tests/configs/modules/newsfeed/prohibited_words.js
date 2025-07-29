@@ -11,7 +11,7 @@ let config = {
 				feeds: [
 					{
 						title: "Rodrigo Ramirez Blog",
-						url: "http://localhost:8080/tests/mocks/newsfeed_test.xml"
+						url: "http://localhost:8000/tests/mocks/newsfeed_test.xml"
 					}
 				],
 				prohibitedWords: ["QPanel"],

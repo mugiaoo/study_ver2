@@ -3,7 +3,7 @@ const { performWebRequest, formatTime } = require("../../../../modules/default/u
 
 describe("Default modules utils tests", () => {
 	describe("performWebRequest", () => {
-		const locationHost = "localhost:8080";
+		const locationHost = "localhost:8000";
 		const locationProtocol = "http";
 
 		let fetchResponse;
