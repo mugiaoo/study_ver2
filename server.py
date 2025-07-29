@@ -6,6 +6,7 @@ import os
 import re
 
 app = Flask(__name__)
+latest_feedback_message = ""
 DB_NAME = "rfid.db"
 CSV_MISSING_TAGS = "missing_tags.csv"
 VALID_TAG_LENGTHS = [22,23]
@@ -237,7 +238,11 @@ def receive_feedback():
 
 @app.route("/feedback", methods=["GET"])
 def get_feedback():
-    return jsonify(latest_feedback_message)
+    global latest_feedback_message
+    # latest_feedback_messageが未定義なら空文字などを返す
+    msg = latest_feedback_message if 'latest_feedback_message' in globals() else ""
+    return jsonify({"message": msg})
+
 
 
 if __name__ == "__main__":
