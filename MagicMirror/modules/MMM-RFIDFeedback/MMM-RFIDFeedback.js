@@ -1,5 +1,3 @@
-console.log("MMM-FeedbackDisplay module loaded");
-
 Module.register("MMM-FeedbackDisplay", {
   defaults: {
     duration: 10000,
@@ -8,6 +6,9 @@ Module.register("MMM-FeedbackDisplay", {
   },
 
   start: function () {
+
+    console.log("[MMM-FeedbackDisplay] start() called");
+
     this.message = null;
     this.hideTimer = null;
 
