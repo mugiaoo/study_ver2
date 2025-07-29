@@ -107,7 +107,7 @@ def initialize_detected_tags_csv():
         print(f"[エラー] 初期化中にエラーが発生: {e}")
         return {}
 
-def send_feedback(message="💄 今日も化粧してえらい！！"):
+def send_feedback(message=" 今日も化粧してえらい！！"):
     try:
         url = "http://localhost:8000/feedback"
         response = requests.post(url, json={"message": message}, timeout=3)
@@ -182,7 +182,7 @@ def main():
                     for name in inactive_names:
                         for t_id, info in known_tags.items():
                             if info["name"] == name and info.get("category") == "リップ":
-                                message = "💄 今日も化粧してえらい！！"
+                                message = " 今日も化粧してえらい！！"
                                 print(message)
                                 send_feedback(message)
                                 break

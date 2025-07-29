@@ -8,7 +8,7 @@ module.exports = NodeHelper.create({
 
     // PythonからのPOST受付
     this.expressApp.post("/feedback", (req, res) => {
-      const message = req.body.message || "💄 化粧してえらい！！";
+      const message = req.body.message || " 化粧してえらい！！";
       this.sendSocketNotification("SHOW_FEEDBACK", message);
       res.sendStatus(200);
     });
