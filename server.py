@@ -217,9 +217,26 @@ def delete_tag():
     except Exception as e:
         print(f"[エラー] タグ削除中に問題が発生: {e}")
         return f"削除中にエラーが発生しました: {e}", 500
+    
+@app.route("/feedback", methods=["POST"])
+def receive_feedback():
+    data = request.json
+    message = data.get("message")
+    
+    if not message:
+        return jsonify({"error": "messageが空です"}), 400
+
+    print(f"[フィードバック受信] {message}")  # サーバーのコンソールに出力
+
+    # 必要に応じてここでHTMLファイルへ渡したり、状態を保存したりできます
+    # 例: グローバル変数に保存する（あくまでシンプルな例）
+    global latest_feedback_message
+    latest_feedback_message = message
+
+    return jsonify({"status": "received"})
 
 
 if __name__ == "__main__":
     init_db()
-    print("[起動] Flaskサーバーを起動中... http://localhost:8000")
-    app.run(host="0.0.0.0", port=8000)
+    print("[起動] Flaskサーバーを起動中... http://localhost:8080")
+    app.run(host="0.0.0.0", port=8080)

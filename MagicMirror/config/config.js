@@ -22,12 +22,13 @@ let config = {
       }
     },
     {
-  module: "MMM-RFIDFeedback",
-  position: "middle_center",
+  module: "MMM-FeedbackDisplay",
+  position: "top_right",
   config: {
-    duration: 10000
+    endpoint: "http://localhost:8080/feedback",  // ← ここを修正！
+    updateInterval: 10000
   }
-},
+}
   ]
 };
 
