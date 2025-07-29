@@ -25,7 +25,7 @@ let config = {
   module: "MMM-FeedbackDisplay",
   position: "top_right",
   config: {
-    endpoint: "http://localhost:8080/feedback",  // ← ここを修正！
+    endpoint: "http://localhost:8080/feedback",  
     updateInterval: 10000
   }
 }
