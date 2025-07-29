@@ -1,3 +1,5 @@
+console.log("MMM-FeedbackDisplay module loaded");
+
 Module.register("MMM-FeedbackDisplay", {
   defaults: {
     duration: 10000,

@@ -229,8 +229,6 @@ def receive_feedback():
 
     print(f"[フィードバック受信] {message}")  # サーバーのコンソールに出力
 
-    # 必要に応じてここでHTMLファイルへ渡したり、状態を保存したりできます
-    # 例: グローバル変数に保存する（あくまでシンプルな例）
     global latest_feedback_message
     latest_feedback_message = message
 
