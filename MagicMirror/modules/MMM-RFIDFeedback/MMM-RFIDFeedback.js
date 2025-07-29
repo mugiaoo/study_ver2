@@ -1,4 +1,4 @@
-Module.register("MMM-FeedbackDisplay", {
+Module.register("MMM-RFIDFeedback", {
   defaults: {
     duration: 10000,
     endpoint: "http://localhost:8000/feedback",
@@ -7,7 +7,7 @@ Module.register("MMM-FeedbackDisplay", {
 
   start: function () {
 
-    console.log("[MMM-FeedbackDisplay] start() called");
+    console.log("[MMM-RFIDFeedback] start() called");
 
     this.message = null;
     this.hideTimer = null;
