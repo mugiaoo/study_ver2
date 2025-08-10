@@ -26,18 +26,18 @@ Module.register("MMM-RFIDFeedback", {
     return wrapper;
   },
 
-  socketNotificationReceived: function (notification, payload) {
-    if (notification === "SHOW_FEEDBACK") {
-      this.message = payload;
-      this.updateDom();
+//   socketNotificationReceived: function (notification, payload) {
+//     if (notification === "SHOW_FEEDBACK") {
+//       this.message = payload;
+//       this.updateDom();
 
-      if (this.hideTimer) clearTimeout(this.hideTimer);
-      this.hideTimer = setTimeout(() => {
-        this.message = null;
-        this.updateDom();
-      }, this.config.duration);
-    }
-  },
+//       if (this.hideTimer) clearTimeout(this.hideTimer);
+//       this.hideTimer = setTimeout(() => {
+//         this.message = null;
+//         this.updateDom();
+//       }, this.config.duration);
+//     }
+//   },
 
   getFeedback: function () {
     fetch(this.config.endpoint)
