@@ -4,8 +4,11 @@ from datetime import datetime
 import csv
 import os
 import re
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
+
 latest_feedback_message = ""
 DB_NAME = "rfid.db"
 CSV_MISSING_TAGS = "missing_tags.csv"
