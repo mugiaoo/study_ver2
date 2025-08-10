@@ -48,8 +48,10 @@ Module.register("MMM-RFIDFeedback", {
         return response.json();
       })
       .then(data => {
+        console.log("[getFeedback] 取得データ:", data);
         if (data && data.message) {
           this.message = data.message;
+          console.log("[getFeedback] メッセージ更新:", this.message);
           this.updateDom();
 
           if (this.hideTimer) clearTimeout(this.hideTimer);
