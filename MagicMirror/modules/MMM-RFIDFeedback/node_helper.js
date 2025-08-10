@@ -1,9 +1,9 @@
-// const NodeHelper = require("node_helper");
+const NodeHelper = require("node_helper");
 // const bodyParser = require("body-parser");
 // const express = require("express");
 
-// module.exports = NodeHelper.create({
-//   start: function () {
+module.exports = NodeHelper.create({
+  start: function () {
 //     this.expressApp.use(bodyParser.json());
 
 //     // PythonからのPOST受付
@@ -13,6 +13,6 @@
 //       res.sendStatus(200);
 //     });
 
-//     console.log("MMM-RFIDFeedback helper started.");
-//   }
-// });
+    console.log("MMM-RFIDFeedback helper started.");
+  }
+});
