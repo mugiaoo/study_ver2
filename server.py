@@ -261,7 +261,9 @@ def receive_feedback():
     return jsonify({"status": "received"})
 
 
-
+@app.route("/display")
+def display():
+    return render_template("display.html")
 
 if __name__ == "__main__":
     init_db()

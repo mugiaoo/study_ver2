@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="5"> <!-- 5秒ごとに再読み込みも可 -->
+  <style>
+    body {
+      background-color: black;
+      color: white;
+      font-size: 4em;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="message"></div>
+
+  <script>
+    async function fetchMessage() {
+      try {
+        const res = await fetch('/feedback');
+        const data = await res.json();
+        const msg = data.message || "";
+        const el = document.getElementById('message');
+        if (msg) {
+          el.textContent = msg;
+          el.classList.remove('hidden');
+          setTimeout(() => {
+            el.textContent = "";
+            el.classList.add('hidden');
+          }, 10000); // 10秒後に消す
+        }
+      } catch (err) {
+        console.error('取得エラー:', err);
+      }
+    }
+    fetchMessage();
+    setInterval(fetchMessage, 5000); // 5秒ごとに確認
+  </script>
+</body>
+</html>
