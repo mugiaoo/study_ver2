@@ -1,11 +1,11 @@
-/* 画面全体を時計回りに90度回転 */
-body {
-  transform-origin: top left;
+/* body {
+  margin: 0;
+  width: 100vh;   /* 横幅と高さを入れ替え */
+  /* height: 100vw;
+  overflow: hidden;
   transform: rotate(90deg);
-  width: 100vh;  /* 画面幅を画面の高さ分に */
-  height: 100vw; /* 画面高さを画面の幅分に */
-  overflow-x: hidden;
+  transform-origin: top left;
   position: absolute;
   top: 0;
-  left: 0;
-}
+  left: -100vh;  /* ここが重要、画面内に戻すため左に高さ分だけ移動 */
+/* } */ 

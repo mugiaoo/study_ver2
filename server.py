@@ -4,8 +4,12 @@ from datetime import datetime
 import csv
 import os
 import re
+from flask_cors import CORS
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='/home/pi/Desktop/study_ver2/templates')
+CORS(app)
+
+latest_feedback_message = ""
 DB_NAME = "rfid.db"
 CSV_MISSING_TAGS = "missing_tags.csv"
 VALID_TAG_LENGTHS = [22,23]
@@ -217,7 +221,60 @@ def delete_tag():
     except Exception as e:
         print(f"[エラー] タグ削除中に問題が発生: {e}")
         return f"削除中にエラーが発生しました: {e}", 500
+    
+# @app.route("/feedback", methods=["POST"])
+# def receive_feedback():
+#     data = request.json
+#     message = data.get("message")
+    
+#     if not message:
+#         return jsonify({"error": "messageが空です"}), 400
 
+#     print(f"[フィードバック受信] {message}")  # サーバーのコンソールに出力
+
+#     global latest_feedback_message
+#     latest_feedback_message = message
+
+#     return jsonify({"status": "received"})
+
+# @app.route("/feedback", methods=["GET"])
+# def get_feedback():
+#     global latest_feedback_message
+#     # latest_feedback_messageが未定義なら空文字などを返す
+#     msg = latest_feedback_message if 'latest_feedback_message' in globals() else ""
+#     return jsonify({"message": msg})
+
+latest_feedback_message = None
+
+@app.route("/feedback", methods=["GET"])
+def get_feedback():
+    return jsonify({"message": latest_feedback_message or ""})
+
+@app.route("/feedback", methods=["POST"])
+def receive_feedback():
+    global latest_feedback_message
+    data = request.json
+    latest_feedback_message = data.get("message", "")
+    return jsonify({"status": "received"})
+
+# @app.route("/feedback", methods=["GET"])
+# def get_feedback():
+#     if latest_feedback_message:
+#         return jsonify({"message": latest_feedback_message})
+#     else:
+#         return jsonify({"message": ""})  # 空でも返す
+
+# @app.route("/feedback", methods=["POST"])
+# def receive_feedback():
+#     global latest_feedback_message
+#     data = request.json
+#     latest_feedback_message = data.get("message", "")
+#     return jsonify({"status": "received"})
+
+
+@app.route("/display")
+def display():
+    return render_template("display.html")
 
 if __name__ == "__main__":
     init_db()

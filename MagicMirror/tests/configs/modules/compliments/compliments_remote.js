@@ -1,15 +1,12 @@
-/* MagicMirror² Test config compliments with remote file
- *
- * By Rejas
- * MIT Licensed.
- */
 let config = {
+	address: "0.0.0.0",
+	ipWhitelist: [],
 	modules: [
 		{
 			module: "compliments",
 			position: "middle_center",
 			config: {
-				remoteFile: "http://localhost:8080/tests/mocks/compliments_test.json"
+				remoteFile: "http://localhost:8000/tests/mocks/compliments_test.json"
 			}
 		}
 	]

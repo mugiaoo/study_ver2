@@ -1,11 +1,5 @@
-/* MagicMirror²
- * Node Helper: Newsfeed - NewsfeedFetcher
- *
- * By Michael Teeuw https://michaelteeuw.nl
- * MIT Licensed.
- */
-
-const stream = require("stream");
+const crypto = require("node:crypto");
+const stream = require("node:stream");
 const FeedMe = require("feedme");
 const iconv = require("iconv-lite");
 const { htmlToText } = require("html-to-text");
@@ -48,21 +42,27 @@ const NewsfeedFetcher = function (url, reloadInterval, encoding, logFeedWarnings
 		parser.on("item", (item) => {
 			const title = item.title;
 			let description = item.description || item.summary || item.content || "";
-			const pubdate = item.pubdate || item.published || item.updated || item["dc:date"];
+			const pubdate = item.pubdate || item.published || item.updated || item["dc:date"] || item["a10:updated"];
 			const url = item.url || item.link || "";
 
 			if (title && pubdate) {
-				const regex = /(<([^>]+)>)/gi;
-				description = description.toString().replace(regex, "");
 				// Convert HTML entities, codes and tag
-				description = htmlToText(description, { wordwrap: false });
+				description = htmlToText(description, {
+					wordwrap: false,
+					selectors: [
+						{ selector: "a", options: { ignoreHref: true, noAnchorUrl: true } },
+						{ selector: "br", format: "inlineSurround", options: { prefix: " " } },
+						{ selector: "img", format: "skip" }
+					]
+				});
 
 				items.push({
 					title: title,
 					description: description,
 					pubdate: pubdate,
 					url: url,
-					useCorsProxy: useCorsProxy
+					useCorsProxy: useCorsProxy,
+					hash: crypto.createHash("sha256").update(`${pubdate} :: ${title} :: ${url}`).digest("hex")
 				});
 			} else if (logFeedWarnings) {
 				Log.warn("Can't parse feed item:");
