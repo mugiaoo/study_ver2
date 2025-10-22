@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="5">
+  <style>
+    body {
+      background-color: black;
+      color: white;
+      font-size: 4em;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden; /* スクロールバー消す */
+    }
+    .hidden {
+      display: none;
+    }
+
+    #clock {
+  position: fixed;
+  top: 20px;      /* 上からの距離 */
+  left: 20px;     /* 左からの距離 */
+  font-size: 1em; /* 小さい文字 */
+  color: white;
+  z-index: 1000;  /* 他の要素より前面に */
+  font-family: monospace;
+}
+  </style>
+</head>
+<body>
+  <div id="clock"></div>
+  <div id="message"></div>
+
+  <script>
+    // 時刻表示
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // メッセージ取得と表示
+    async function fetchMessage() {
+      try {
+        const res = await fetch('/feedback');
+        const data = await res.json();
+        const msg = data.message || "";
+        const el = document.getElementById('message');
+        if (msg) {
+          el.textContent = msg;
+          el.classList.remove('hidden');
+          setTimeout(() => {
+            el.textContent = "";
+            el.classList.add('hidden');
+          }, 10000);
+        }
+      } catch (err) {
+        console.error('取得エラー:', err);
+      }
+    }
+    fetchMessage();
+    setInterval(fetchMessage, 5000);
+
+    // フルスクリーンに切り替え（ユーザー操作が必要な場合もある）
+    function requestFullScreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen();
+      } else if (el.mozRequestFullScreen) { /* Firefox */
+        el.mozRequestFullScreen();
+      } else if (el.webkitRequestFullscreen) { /* Chrome, Safari */
+        el.webkitRequestFullscreen();
+      } else if (el.msRequestFullscreen) { /* IE/Edge */
+        el.msRequestFullscreen();
+      }
+    }
+
+    // ページ読み込み後にフルスクリーンを試みる
+    window.onload = () => {
+      // 自動でフルスクリーンにしたい場合（ブラウザによってはユーザー操作が必須）
+      requestFullScreen();
+    };
+
+    // ユーザーが画面をクリックしたらフルスクリーン切替（自動でできない時用）
+    document.body.addEventListener('click', () => {
+      requestFullScreen();
+    });
+  </script>
+</body>
+</html>
