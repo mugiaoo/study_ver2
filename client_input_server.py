@@ -14,7 +14,7 @@ CSV_USED_ALL = "used_items_all.csv"
 TAG_LENGTHS = [22, 23]
 TAG_PREFIX = "E2180"
 CHECK_INTERVAL = 5
-INACTIVE_TIME = 20
+INACTIVE_TIME = 10
 
 # 初期化：used_items.csv / used_items_all.csv を空にする
 def initialize_used_csvs():

@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="5"> <!-- 5秒ごとに再読み込みも可 -->
+  <meta http-equiv="refresh" content="5">
   <style>
     body {
       background-color: black;
@@ -13,6 +13,7 @@
       align-items: center;
       height: 100vh;
       margin: 0;
+      overflow: hidden; /* スクロールバー消す */
     }
     .hidden {
       display: none;
@@ -35,14 +36,39 @@
           setTimeout(() => {
             el.textContent = "";
             el.classList.add('hidden');
-          }, 10000); // 10秒後に消す
+          }, 10000);
         }
       } catch (err) {
         console.error('取得エラー:', err);
       }
     }
     fetchMessage();
-    setInterval(fetchMessage, 5000); // 5秒ごとに確認
+    setInterval(fetchMessage, 5000);
+
+    // フルスクリーンに切り替え（ユーザー操作が必要な場合もある）
+    function requestFullScreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen();
+      } else if (el.mozRequestFullScreen) { /* Firefox */
+        el.mozRequestFullScreen();
+      } else if (el.webkitRequestFullscreen) { /* Chrome, Safari */
+        el.webkitRequestFullscreen();
+      } else if (el.msRequestFullscreen) { /* IE/Edge */
+        el.msRequestFullscreen();
+      }
+    }
+
+    // ページ読み込み後にフルスクリーンを試みる
+    window.onload = () => {
+      // 自動でフルスクリーンにしたい場合（ブラウザによってはユーザー操作が必須）
+      requestFullScreen();
+    };
+
+    // ユーザーが画面をクリックしたらフルスクリーン切替（自動でできない時用）
+    document.body.addEventListener('click', () => {
+      requestFullScreen();
+    });
   </script>
 </body>
 </html>

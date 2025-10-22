@@ -6,7 +6,7 @@ import os
 import re
 from flask_cors import CORS
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='/home/pi/Desktop/study_ver2/templates')
 CORS(app)
 
 latest_feedback_message = ""
@@ -248,10 +248,7 @@ latest_feedback_message = None
 
 @app.route("/feedback", methods=["GET"])
 def get_feedback():
-    if latest_feedback_message:
-        return jsonify({"message": latest_feedback_message})
-    else:
-        return jsonify({"message": ""})  # 空でも返す
+    return jsonify({"message": latest_feedback_message or ""})
 
 @app.route("/feedback", methods=["POST"])
 def receive_feedback():
@@ -259,6 +256,20 @@ def receive_feedback():
     data = request.json
     latest_feedback_message = data.get("message", "")
     return jsonify({"status": "received"})
+
+# @app.route("/feedback", methods=["GET"])
+# def get_feedback():
+#     if latest_feedback_message:
+#         return jsonify({"message": latest_feedback_message})
+#     else:
+#         return jsonify({"message": ""})  # 空でも返す
+
+# @app.route("/feedback", methods=["POST"])
+# def receive_feedback():
+#     global latest_feedback_message
+#     data = request.json
+#     latest_feedback_message = data.get("message", "")
+#     return jsonify({"status": "received"})
 
 
 @app.route("/display")
