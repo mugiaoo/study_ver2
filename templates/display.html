@@ -18,12 +18,34 @@
     .hidden {
       display: none;
     }
+    #clock {
+  position: fixed;
+  top: 20px;      /* 上からの距離 */
+  left: 20px;     /* 左からの距離 */
+  font-size: 1em; /* 小さい文字 */
+  color: white;
+  z-index: 1000;  /* 他の要素より前面に */
+  font-family: monospace;
+}
   </style>
 </head>
 <body>
+  <div id="clock"></div>
   <div id="message"></div>
 
   <script>
+    // 時刻表示
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // メッセージ取得と表示
     async function fetchMessage() {
       try {
         const res = await fetch('/feedback');
