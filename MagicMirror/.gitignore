@@ -58,19 +58,19 @@ Temporary Items
 .Trash-*
 
 # Ignore all modules except the default modules.
-/modules/**
+# /modules/**
 !/modules/default
 !/modules/default/**
 !/modules/README.md**
 
-# Ignore changes to the custom css files.
-!/css/custom.css
-
+# Ignore changes to the custom css files but keep the sample and main.
+# /css/*
+!/css/custom.css.sample
+!/css/main.css
 
 # Ignore users config file but keep the sample.
-/config/*
+# /config/*
 !/config/config.js.sample
-!/config/config.js
 
 # Vim
 ## swap
@@ -81,3 +81,6 @@ Temporary Items
 *.orig
 *.rej
 *.bak
+
+# Ignore positions file (#3518)
+js/positions.js

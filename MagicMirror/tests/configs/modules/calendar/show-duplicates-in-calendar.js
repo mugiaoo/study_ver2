@@ -1,9 +1,6 @@
-/* MagicMirror² Test config for multiple calendar events having the same name and start date/time
- *
- * By Paranoid93 https://github.com/Paranoid93/
- * MIT Licensed.
- */
 let config = {
+	address: "0.0.0.0",
+	ipWhitelist: [],
 	timeFormat: 12,
 
 	modules: [
@@ -17,12 +14,12 @@ let config = {
 					{
 						maximumEntries: 15,
 						maximumNumberOfDays: 10000,
-						url: "http://localhost:8080/tests/mocks/calendar_test.ics" // contains 11 events
+						url: "http://localhost:8000/tests/mocks/calendar_test.ics" // contains 11 events
 					},
 					{
 						maximumEntries: 15,
 						maximumNumberOfDays: 10000,
-						url: "http://localhost:8080/tests/mocks/calendar_test_clone.ics" // clone of upper calendar
+						url: "http://localhost:8000/tests/mocks/calendar_test_clone.ics" // clone of upper calendar
 					}
 				]
 			}
