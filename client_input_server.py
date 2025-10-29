@@ -25,6 +25,10 @@ def initialize_used_csvs():
         writer = csv.writer(f)
         writer.writerow(["timestamp", "name"])
 
+# systemd で動いているか判定
+def is_running_under_systemd():
+    return not sys.stdin.isatty()
+
 # 非表示でキー入力を取得（1文字）
 def get_hidden_key():
     fd = sys.stdin.fileno()
@@ -39,10 +43,8 @@ def convert_full_and_kanji_to_halfwidth(s):
     zenkaku = "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
     hankaku = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
     s = s.translate(str.maketrans(zenkaku, hankaku))
-    kanji_to_num = {
-        "〇": "0", "一": "1", "二": "2", "三": "3", "四": "4",
-        "五": "5", "六": "6", "七": "7", "八": "8", "九": "9"
-    }
+    kanji_to_num = {"〇": "0", "一": "1", "二": "2", "三": "3", "四": "4",
+                    "五": "5", "六": "6", "七": "7", "八": "8", "九": "9"}
     for k, v in kanji_to_num.items():
         s = s.replace(k, v)
     return s
@@ -59,7 +61,7 @@ def fetch_tags():
         pass
     return {}
 
-def save_to_detected_csv(tag_id, name, category="") :
+def save_to_detected_csv(tag_id, name, category=""):
     if not name:
         return
     new_file = not os.path.exists(CSV_DETECTED)
@@ -112,8 +114,7 @@ def send_feedback(message=" 今日も化粧してえらい！！", image_url=Non
         url = "http://localhost:8000/feedback"
         payload = {"message": message}
         if image_url:
-            payload["image"] = image_url 
-
+            payload["image"] = image_url
         response = requests.post(url, json=payload, timeout=3)
         if response.status_code == 200:
             print("[送信成功] フィードバック送信:", message, image_url)
@@ -136,67 +137,66 @@ def main():
     current_time = time.time()
     tags_last_seen = {tag_id: current_time for tag_id in known_tags.keys()}
 
-    # 🔽 追加：リップ読み取り記録用セット
     recently_seen_lip_tags = set()
     last_check_time = current_time
 
+    auto_mode = is_running_under_systemd()
+
     try:
         while True:
-            ch = get_hidden_key()
-            if ord(ch) == 27:
-                print("\n[終了] 終了します。")
-                break
-
-            if ch == '\r' or ch == '\n':
-                tag = convert_full_and_kanji_to_halfwidth(buffer.strip())
-                buffer = ""
-
-                if tag.startswith(TAG_PREFIX) and len(tag) in TAG_LENGTHS:
-                    now = time.time()
-
-                    if now - last_fetch > CHECK_INTERVAL or not tag_id_to_info:
-                        tag_id_to_info = fetch_tags()
-                        last_fetch = now
-
-                    info = tag_id_to_info.get(tag)
-                    if info:
-                        name = info["name"]
-                        category = info.get("category", "")
-                        save_to_detected_csv(tag, name)
-                        tags_last_seen[tag] = now
-
-                        # 🔽 追加：リップカテゴリの読み取り記録
-                        if category == "リップ":
-                            recently_seen_lip_tags.add(tag)
-
-                current_time = time.time()
-
-                # 🔽 チェック間隔が経過していたら未使用処理とリップ未検出処理を行う
-                if current_time - last_check_time > INACTIVE_TIME:
-                    inactive_names = []
-                    for t_id, data in tag_id_to_info.items():
-                        last_seen = tags_last_seen.get(t_id)
-                        if last_seen is None or current_time - last_seen > INACTIVE_TIME:
-                            inactive_names.append(data["name"])
-
-                    save_to_used_csv(inactive_names, logged_used)
-                    save_to_used_all_csv(inactive_names)
-
-                    # リップ使用検出（未使用から）
-                    for name in inactive_names:
-                        for t_id, info in known_tags.items():
-                            if info["name"] == name and info.get("category") == "リップ":
-                                message = " 今日も化粧してえらい！！"
-                                print(message)
-                                send_feedback(message)
-                                break
-
-                    # 🔁 記録をリセット
-                    recently_seen_lip_tags.clear()
-                    last_check_time = current_time
-
+            if auto_mode:
+                # systemd起動時は入力待ちせずにループを続ける
+                time.sleep(1)
+                tag = ""
             else:
-                buffer += ch
+                ch = get_hidden_key()
+                if ord(ch) == 27:
+                    print("\n[終了] 終了します。")
+                    break
+                if ch == '\r' or ch == '\n':
+                    tag = convert_full_and_kanji_to_halfwidth(buffer.strip())
+                    buffer = ""
+                else:
+                    buffer += ch
+                    continue
+
+            now = time.time()
+
+            if now - last_fetch > CHECK_INTERVAL or not tag_id_to_info:
+                tag_id_to_info = fetch_tags()
+                last_fetch = now
+
+            if tag.startswith(TAG_PREFIX) and len(tag) in TAG_LENGTHS:
+                info = tag_id_to_info.get(tag)
+                if info:
+                    name = info["name"]
+                    category = info.get("category", "")
+                    save_to_detected_csv(tag, name)
+                    tags_last_seen[tag] = now
+                    if category == "リップ":
+                        recently_seen_lip_tags.add(tag)
+
+            current_time = time.time()
+            if current_time - last_check_time > INACTIVE_TIME:
+                inactive_names = []
+                for t_id, data in tag_id_to_info.items():
+                    last_seen = tags_last_seen.get(t_id)
+                    if last_seen is None or current_time - last_seen > INACTIVE_TIME:
+                        inactive_names.append(data["name"])
+
+                save_to_used_csv(inactive_names, logged_used)
+                save_to_used_all_csv(inactive_names)
+
+                for name in inactive_names:
+                    for t_id, info in known_tags.items():
+                        if info["name"] == name and info.get("category") == "リップ":
+                            message = " 今日も化粧してえらい！！"
+                            print(message)
+                            send_feedback(message)
+                            break
+
+                recently_seen_lip_tags.clear()
+                last_check_time = current_time
 
     except KeyboardInterrupt:
         print("\n[終了] Ctrl+Cが押されました。終了します。")
