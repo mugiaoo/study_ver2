@@ -224,9 +224,6 @@ def delete_tag():
         return f"削除中にエラーが発生しました: {e}", 500
     
 
-# latest_feedback_message = None
-# latest_feedback_image = None
-
 @app.route("/feedback", methods=["GET"])
 def get_feedback():
     return jsonify({"message": latest_feedback_message or "", "image": latest_feedback_image or ""})
@@ -250,8 +247,12 @@ def test_feedback():
 
 
 @app.route("/display")
-def display():
-    return render_template("display.html")
+def show_display():
+    return render_template(
+        "display.html",
+        latest_feedback_message=latest_feedback_message or "",
+        latest_feedback_image=latest_feedback_image or ""
+    )
 
 if __name__ == "__main__":
     init_db()
