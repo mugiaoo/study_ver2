@@ -10,6 +10,7 @@ app = Flask(__name__, template_folder='/home/pi/Desktop/study_ver2/templates')
 CORS(app)
 
 latest_feedback_message = ""
+latest_feedback_image = ""
 DB_NAME = "rfid.db"
 CSV_MISSING_TAGS = "missing_tags.csv"
 VALID_TAG_LENGTHS = [22,23]
@@ -223,8 +224,8 @@ def delete_tag():
         return f"削除中にエラーが発生しました: {e}", 500
     
 
-latest_feedback_message = None
-latest_feedback_image = None
+# latest_feedback_message = None
+# latest_feedback_image = None
 
 @app.route("/feedback", methods=["GET"])
 def get_feedback():
