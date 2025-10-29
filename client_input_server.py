@@ -191,8 +191,9 @@ def main():
                     for t_id, info in known_tags.items():
                         if info["name"] == name and info.get("category") == "リップ":
                             message = " 今日も化粧してえらい！！"
+                            image_url = "http://localhost:8000/static/imgs/ikemenn.jpg"
                             print(message)
-                            send_feedback(message)
+                            send_feedback(message, image_url)
                             break
 
                 recently_seen_lip_tags.clear()
