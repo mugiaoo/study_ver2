@@ -32,6 +32,8 @@
 <body>
   <div id="clock"></div>
   <div id="message"></div>
+  <img id="feedbackImage" class="hidden" style="max-width: 80%; max-height: 80%; border-radius: 20px;">
+
 
   <script>
     // 時刻表示
@@ -51,15 +53,24 @@
         const res = await fetch('/feedback');
         const data = await res.json();
         const msg = data.message || "";
+        const img = data.image || "";
         const el = document.getElementById('message');
-        if (msg) {
+        const imgEl = document.getElementById('feedbackImage');
+        if (msg || img) {
           el.textContent = msg;
           el.classList.remove('hidden');
+
+          if (img) {
+            imgEl.src = img;
+            imgEl.classList.remove('hidden');
+          }
+
           setTimeout(() => {
             el.textContent = "";
             el.classList.add('hidden');
+            imgEl.classList.add('hidden');
           }, 10000);
-        }
+        } 
       } catch (err) {
         console.error('取得エラー:', err);
       }

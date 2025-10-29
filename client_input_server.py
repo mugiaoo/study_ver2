@@ -107,12 +107,16 @@ def initialize_detected_tags_csv():
         print(f"[エラー] 初期化中にエラーが発生: {e}")
         return {}
 
-def send_feedback(message=" 今日も化粧してえらい！！"):
+def send_feedback(message=" 今日も化粧してえらい！！", image_url=None):
     try:
         url = "http://localhost:8000/feedback"
-        response = requests.post(url, json={"message": message}, timeout=3)
+        payload = {"message": message}
+        if image_url:
+            payload["image"] = image_url 
+
+        response = requests.post(url, json=payload, timeout=3)
         if response.status_code == 200:
-            print("[送信成功] フィードバック送信:", message)
+            print("[送信成功] フィードバック送信:", message, image_url)
         else:
             print(f"[送信失敗] ステータスコード: {response.status_code}")
     except Exception as e:

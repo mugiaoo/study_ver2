@@ -222,54 +222,30 @@ def delete_tag():
         print(f"[エラー] タグ削除中に問題が発生: {e}")
         return f"削除中にエラーが発生しました: {e}", 500
     
-# @app.route("/feedback", methods=["POST"])
-# def receive_feedback():
-#     data = request.json
-#     message = data.get("message")
-    
-#     if not message:
-#         return jsonify({"error": "messageが空です"}), 400
-
-#     print(f"[フィードバック受信] {message}")  # サーバーのコンソールに出力
-
-#     global latest_feedback_message
-#     latest_feedback_message = message
-
-#     return jsonify({"status": "received"})
-
-# @app.route("/feedback", methods=["GET"])
-# def get_feedback():
-#     global latest_feedback_message
-#     # latest_feedback_messageが未定義なら空文字などを返す
-#     msg = latest_feedback_message if 'latest_feedback_message' in globals() else ""
-#     return jsonify({"message": msg})
 
 latest_feedback_message = None
+latest_feedback_image = None
 
 @app.route("/feedback", methods=["GET"])
 def get_feedback():
-    return jsonify({"message": latest_feedback_message or ""})
+    return jsonify({"message": latest_feedback_message or "", "image": latest_feedback_image or ""})
 
 @app.route("/feedback", methods=["POST"])
 def receive_feedback():
-    global latest_feedback_message
+    global latest_feedback_message, latest_feedback_image
     data = request.json
     latest_feedback_message = data.get("message", "")
+    latest_feedback_image = data.get("image", "")
     return jsonify({"status": "received"})
 
-# @app.route("/feedback", methods=["GET"])
-# def get_feedback():
-#     if latest_feedback_message:
-#         return jsonify({"message": latest_feedback_message})
-#     else:
-#         return jsonify({"message": ""})  # 空でも返す
 
-# @app.route("/feedback", methods=["POST"])
-# def receive_feedback():
-#     global latest_feedback_message
-#     data = request.json
-#     latest_feedback_message = data.get("message", "")
-#     return jsonify({"status": "received"})
+@app.route("/test-feedback")
+def test_feedback():
+    global latest_feedback_message, latest_feedback_image
+    latest_feedback_message = "💄 テスト：今日も化粧してえらい！！"
+    latest_feedback_image = "/static/imgs/ikemen.png"  # 任意
+    return jsonify({"status": "ok", "message": latest_feedback_message})
+
 
 
 @app.route("/display")
