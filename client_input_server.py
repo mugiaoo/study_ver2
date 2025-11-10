@@ -1,4 +1,4 @@
-import sys
+=import sys
 import tty
 import termios
 import csv
@@ -7,29 +7,31 @@ import time
 import requests
 from datetime import datetime
 
-# 定数定義
-CSV_DETECTED = "detected_tags.csv"
-CSV_USED = "used_items.csv"
-CSV_USED_ALL = "used_items_all.csv"
+# === 定数設定 ===
+CSV_DETECTED = "rfid_detect_log.csv"
+CSV_USED = "cosmetics_session_summary.csv"
+CSV_USED_ALL = "cosmetics_usage_durations.csv"
+
 TAG_LENGTHS = [22, 23]
 TAG_PREFIX = "E2180"
-CHECK_INTERVAL = 5
-INACTIVE_TIME = 10
+CHECK_INTERVAL = 5      # サーバー問い合わせ間隔
+INACTIVE_TIME = 10      # 使用終了と判断する非検出時間（秒）
 
-# 初期化：used_items.csv / used_items_all.csv を空にする
+# === CSV初期化 ===
 def initialize_used_csvs():
-    with open(CSV_USED, mode='w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(["timestamp", "name"])
-    with open(CSV_USED_ALL, mode='w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(["timestamp", "name"])
+    for csv_path, headers in [
+        (CSV_USED, ["timestamp", "name", "category"]),
+        (CSV_USED_ALL, ["timestamp", "name", "duration(sec)"])
+    ]:
+        with open(csv_path, mode='w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
 
-# systemd で動いているか判定
+# === systemdで動作中か判定 ===
 def is_running_under_systemd():
     return not sys.stdin.isatty()
 
-# 非表示でキー入力を取得（1文字）
+# === 非表示でキー入力取得 ===
 def get_hidden_key():
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
@@ -39,6 +41,7 @@ def get_hidden_key():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
+# === 全角→半角変換 ===
 def convert_full_and_kanji_to_halfwidth(s):
     zenkaku = "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
     hankaku = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -49,18 +52,17 @@ def convert_full_and_kanji_to_halfwidth(s):
         s = s.replace(k, v)
     return s
 
+# === サーバーからタグ一覧取得 ===
 def fetch_tags():
     try:
         res = requests.get("http://localhost:8000/tags", timeout=3)
         if res.status_code == 200:
-            return {
-                t["tag_id"]: {"name": t["name"], "category": t.get("category", "")}
-                for t in res.json()
-            }
-    except:
-        pass
+            return {t["tag_id"]: {"name": t["name"], "category": t.get("category", "")} for t in res.json()}
+    except Exception as e:
+        print(f"[タグ取得エラー] {e}")
     return {}
 
+# === 検出CSVへ保存 ===
 def save_to_detected_csv(tag_id, name, category=""):
     if not name:
         return
@@ -71,26 +73,7 @@ def save_to_detected_csv(tag_id, name, category=""):
             writer.writerow(["timestamp", "tag_id", "name", "category"])
         writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tag_id, name, category])
 
-def save_to_used_csv(names, logged_names):
-    if not names:
-        return
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(CSV_USED, 'a', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        for name in names:
-            if name not in logged_names:
-                writer.writerow([timestamp, name])
-                logged_names.add(name)
-
-def save_to_used_all_csv(names):
-    if not names:
-        return
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(CSV_USED_ALL, 'a', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        for name in names:
-            writer.writerow([timestamp, name])
-
+# === 起動時にタグ一覧CSV初期化 ===
 def initialize_detected_tags_csv():
     try:
         response = requests.get("http://localhost:8000/tags", timeout=3)
@@ -109,7 +92,8 @@ def initialize_detected_tags_csv():
         print(f"[エラー] 初期化中にエラーが発生: {e}")
         return {}
 
-def send_feedback(message=" 今日も化粧してえらい！！", image_url=None):
+# === フィードバック送信 ===
+def send_feedback(message="今日も化粧してえらい！！", image_url=None):
     try:
         url = "http://localhost:8000/feedback"
         payload = {"message": message}
@@ -121,8 +105,9 @@ def send_feedback(message=" 今日も化粧してえらい！！", image_url=Non
         else:
             print(f"[送信失敗] ステータスコード: {response.status_code}")
     except Exception as e:
-        print(f"[送信エラー] フィードバック送信中に例外発生: {e}")
+        print(f"[送信エラー] {e}")
 
+# === メイン ===
 def main():
     initialize_used_csvs()
     known_tags = initialize_detected_tags_csv()
@@ -133,19 +118,14 @@ def main():
     tag_id_to_info = {}
     last_fetch = 0
     logged_used = set()
+    tags_seen = {}  # { tag_id: {"first": 時刻, "last": 時刻} }
 
-    current_time = time.time()
-    tags_last_seen = {tag_id: current_time for tag_id in known_tags.keys()}
-
-    recently_seen_lip_tags = set()
-    last_check_time = current_time
-
+    last_check_time = time.time()
     auto_mode = is_running_under_systemd()
 
     try:
         while True:
             if auto_mode:
-                # systemd起動時は入力待ちせずにループを続ける
                 time.sleep(1)
                 tag = ""
             else:
@@ -162,41 +142,60 @@ def main():
 
             now = time.time()
 
+            # 定期的にタグ情報を更新
             if now - last_fetch > CHECK_INTERVAL or not tag_id_to_info:
                 tag_id_to_info = fetch_tags()
                 last_fetch = now
 
+            # タグが入力された場合のみ処理
             if tag.startswith(TAG_PREFIX) and len(tag) in TAG_LENGTHS:
                 info = tag_id_to_info.get(tag)
                 if info:
                     name = info["name"]
                     category = info.get("category", "")
-                    save_to_detected_csv(tag, name)
-                    tags_last_seen[tag] = now
-                    if category == "リップ":
-                        recently_seen_lip_tags.add(tag)
+                    save_to_detected_csv(tag, name, category)
+                    if tag not in tags_seen:
+                        tags_seen[tag] = {"first": now, "last": now}
+                    else:
+                        tags_seen[tag]["last"] = now
 
+            # 使用終了チェック
             current_time = time.time()
             if current_time - last_check_time > INACTIVE_TIME:
-                inactive_names = []
-                for t_id, data in tag_id_to_info.items():
-                    last_seen = tags_last_seen.get(t_id)
-                    if last_seen is None or current_time - last_seen > INACTIVE_TIME:
-                        inactive_names.append(data["name"])
+                inactive_tags = []
+                for tag_id, info in tag_id_to_info.items():
+                    seen_data = tags_seen.get(tag_id)
+                    if not seen_data:
+                        continue
 
-                save_to_used_csv(inactive_names, logged_used)
-                save_to_used_all_csv(inactive_names)
+                    last_seen = seen_data["last"]
+                    first_seen = seen_data["first"]
+                    if current_time - last_seen > INACTIVE_TIME:
+                        name = info["name"]
+                        category = info.get("category", "")
+                        duration = int(last_seen - first_seen)
 
-                for name in inactive_names:
-                    for t_id, info in known_tags.items():
-                        if info["name"] == name and info.get("category") == "リップ":
-                            message = " 今日も化粧してえらい！！"
-                            image_url = "http://localhost:8000/static/imgs/ikemenn.jpg"
-                            print(message)
-                            send_feedback(message, image_url)
-                            break
+                        # used_items_all.csv に全記録
+                        with open(CSV_USED_ALL, 'a', encoding='utf-8', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, duration])
 
-                recently_seen_lip_tags.clear()
+                        # used_items.csv に重複なしで記録
+                        if name not in logged_used:
+                            with open(CSV_USED, 'a', encoding='utf-8', newline='') as f:
+                                writer = csv.writer(f)
+                                writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, category])
+                            logged_used.add(name)
+
+                            # 💄 リップ使用時に褒め言葉
+                            if category == "リップ":
+                                message = "今日も化粧してえらい！！"
+                                image_url = "http://localhost:8000/static/imgs/ikemen.png"
+                                send_feedback(message, image_url)
+
+                        # タグ削除
+                        del tags_seen[tag_id]
+
                 last_check_time = current_time
 
     except KeyboardInterrupt:
