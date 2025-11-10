@@ -240,8 +240,8 @@ def receive_feedback():
 @app.route("/test-feedback")
 def test_feedback():
     global latest_feedback_message, latest_feedback_image
-    latest_feedback_message = "テスト：今日も化粧してえらい！！"
-    latest_feedback_image = "/static/imgs/ikemenn.png"  # 任意
+    latest_feedback_message = "今日も化粧してえらい！！"
+    latest_feedback_image = "/static/imgs/miniao.png"  # 任意
     return jsonify({"status": "ok", "message": latest_feedback_message})
 
 
