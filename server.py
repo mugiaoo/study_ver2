@@ -241,7 +241,7 @@ def receive_feedback():
 def test_feedback():
     global latest_feedback_message, latest_feedback_image
     latest_feedback_message = "💄 テスト：今日も化粧してえらい！！"
-    latest_feedback_image = "/static/imgs/ikemen.png"  # 任意
+    latest_feedback_image = "/static/imgs/ikemenn.jpg"  # 任意
     return jsonify({"status": "ok", "message": latest_feedback_message})
 
 
