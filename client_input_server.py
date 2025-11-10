@@ -228,5 +228,5 @@ def main():
                 if st["category"] == "リップ":
                     send_feedback(
                         "今日も化粧してえらい！！",
-                        "http://localhost:8000/static/imgs/ikemenn.jpg"
+                        "http://localhost:8000/static/imgs/ikemenn.png"
                     )
