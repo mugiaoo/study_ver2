@@ -5,16 +5,17 @@ import requests
 from datetime import datetime
 
 # ======================
-# 設定
+# 設定（あなたの環境に合わせた最適値）
 # ======================
 CSV_DETECTED = "rfid_detect_log.csv"
-CSV_USED = "cosmetics_session_summary.csv"        # 一度だけ記録される
-CSV_USED_ALL = "cosmetics_usage_durations.csv"    # 使用時間を全保存
+CSV_USED = "cosmetics_session_summary.csv"
+CSV_USED_ALL = "cosmetics_usage_durations.csv"
 
-TAG_PREFIX = "E280"     # ← 重要：E2180 と E280 の両方を拾えるようにした
-TAG_LENGTHS = [22, 23]
-CHECK_INTERVAL = 3
-INACTIVE_TIME = 7
+TAG_PREFIX = "E280"          # ← ここ重要
+TAG_LENGTHS = [23]           # ← 必ず 23 文字だけ
+
+CHECK_INTERVAL = 5
+INACTIVE_TIME = 10
 
 
 # ======================
@@ -30,81 +31,78 @@ def initialize_csvs():
 
 
 # ======================
-# HID デバイス探索（接続されるまで待つ）
+# HID デバイス探索
 # ======================
 def find_hid_device():
-    print("=== RFID Hotplug Mode ===")
+    print("\n🔍 RFIDリーダー接続待ち… (電源を入れてください)")
+
     while True:
         hid_list = [f"/dev/{d}" for d in os.listdir("/dev") if d.startswith("hidraw")]
 
         for dev in hid_list:
             try:
-                with open(dev, "rb") as f:
-                    pass
-
-                print(f"\n✅ RFID リーダー検出: {dev}")
-                return dev
-
+                with open(dev, "rb"):
+                    print(f"\n✅ RFID リーダー検出: {dev}")
+                    return dev
             except PermissionError:
                 continue
             except:
                 continue
 
-        print("RFIDリーダーを接続してください…", end="\r")
         time.sleep(1)
 
 
 # ======================
-# HID からタグ読取
+# HID 読み取り
 # ======================
 def read_hid_input(hid_path):
+    """ HID キーボード型 RFID リーダーから 1 タグ読取 """
     keymap = {
         0x1E: "1", 0x1F: "2", 0x20: "3", 0x21: "4",
         0x22: "5", 0x23: "6", 0x24: "7", 0x25: "8",
         0x26: "9", 0x27: "0",
-        0x04: "a", 0x05: "b", 0x06: "c", 0x07: "d",
-        0x08: "e", 0x09: "f", 0x0A: "g", 0x0B: "h",
-        0x0C: "i", 0x0D: "j", 0x0E: "k", 0x0F: "l",
-        0x10: "m", 0x11: "n", 0x12: "o", 0x13: "p",
-        0x14: "q", 0x15: "r", 0x16: "s", 0x17: "t",
-        0x18: "u", 0x19: "v", 0x1A: "w", 0x1B: "x",
-        0x1C: "y", 0x1D: "z",
+        0x04: "A", 0x05: "B", 0x06: "C", 0x07: "D",
+        0x08: "E", 0x09: "F", 0x0A: "G", 0x0B: "H",
+        0x0C: "I", 0x0D: "J", 0x0E: "K", 0x0F: "L",
+        0x10: "M", 0x11: "N", 0x12: "O", 0x13: "P",
+        0x14: "Q", 0x15: "R", 0x16: "S", 0x17: "T",
+        0x18: "U", 0x19: "V", 0x1A: "W", 0x1B: "X",
+        0x1C: "Y", 0x1D: "Z"
     }
-    buffer = ""
 
     try:
         with open(hid_path, "rb") as hid:
+            buffer = ""
             while True:
                 data = hid.read(8)
                 keycode = data[2]
 
+                # 文字
                 if keycode in keymap:
-                    buffer += keymap[keycode].upper()
+                    buffer += keymap[keycode]
 
-                elif keycode == 0x28:  # Enter
-                    tag = buffer.strip()
+                # Enterで 1 タグ確定
+                elif keycode == 0x28:
+                    tag = buffer.strip().upper()
                     buffer = ""
-                    print(f"[DEBUG] HID入力: {tag}")   # ← 追加
                     return tag
 
     except Exception:
-        print("\n⚠ RFID切断：再接続待ち")
+        print("\n⚠ RFID切断 detected → 再接続待ち…")
         return None
 
 
 # ======================
-# タグ一覧取得
+# /tags 取得
 # ======================
 def fetch_tags():
     try:
         res = requests.get("http://localhost:8000/tags", timeout=3)
         if res.status_code == 200:
-            tags = {t["tag_id"]: {"name": t["name"], "category": t.get("category", "")}
+            return {t["tag_id"]: {"name": t["name"], "category": t["category"]}
                     for t in res.json()}
-            print(f"[DEBUG] タグ一覧取得: {tags}")  # ← 追加
-            return tags
-    except Exception as e:
-        print("[DEBUG] タグ取得失敗:", e)
+    except:
+        pass
     return {}
 
 
@@ -125,15 +123,18 @@ def save_detect(tag, name, category):
 # ======================
 def send_feedback(msg, img=None):
     try:
-        requests.post("http://localhost:8000/feedback",
-                      json={"message": msg, "image": img}, timeout=3)
-        print(f"[褒め言葉送信] {msg}")
+        requests.post(
+            "http://localhost:8000/feedback",
+            json={"message": msg, "image": img},
+            timeout=3
+        )
+        print(f"💬 褒め言葉送信: {msg}")
     except:
-        print("[送信失敗] フィードバック送信エラー")
+        print("⚠ フィードバック送信に失敗")
 
 
 # ======================
-# メイン処理
+# メイン
 # ======================
 def main():
     print("=== RFID Reader START ===")
@@ -142,60 +143,67 @@ def main():
     tags_seen = {}
     logged_used = set()
     last_fetch = 0
-    tag_data = {}
 
     while True:
         hid_path = find_hid_device()
 
         while True:
             now = time.time()
-
-            # タグ読取
             tag = read_hid_input(hid_path)
+
             if tag is None:
                 break
 
-            # タグ一覧更新
+            # タグ更新
             if now - last_fetch > CHECK_INTERVAL:
                 tag_data = fetch_tags()
                 last_fetch = now
 
-            # E21 で始まるタグのみ扱う（E280 / E2180 両方OK）
+            # フォーマットチェック
             if tag.startswith(TAG_PREFIX) and len(tag) in TAG_LENGTHS:
                 info = tag_data.get(tag)
+
                 if info:
                     name = info["name"]
                     category = info["category"]
+
+                    print(f"🎯 読取: {name} / {category}")
                     save_detect(tag, name, category)
 
                     tags_seen[tag] = {"first": now, "last": now}
-                    print(f"[検出] {name} / {category}")
 
                 else:
-                    print(f"[不明タグ] {tag} → /tags に未登録")
+                    print(f"⚠ 未登録タグ: {tag}")
 
-            # 使用終了処理
+            # 使用終了判定
             for tid, d in list(tags_seen.items()):
                 if now - d["last"] > INACTIVE_TIME:
                     info = tag_data.get(tid)
+                    if not info:
+                        del tags_seen[tid]
+                        continue
+
                     name = info["name"]
                     category = info["category"]
                     duration = int(d["last"] - d["first"])
 
-                    # 全履歴保存
+                    # 全ログ
                     with open(CSV_USED_ALL, "a", encoding="utf-8", newline="") as f:
-                        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                                name, duration])
+                        csv.writer(f).writerow([
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            name, duration
+                        ])
 
-                    # 一度だけ記録
+                    # 一回だけのログ
                     if name not in logged_used:
                         with open(CSV_USED, "a", encoding="utf-8", newline="") as f:
-                            csv.writer(f).writerow(
-                                [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, category]
-                            )
+                            csv.writer(f).writerow([
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                name, category
+                            ])
                         logged_used.add(name)
 
-                        # リップ → 褒め言葉
+                        # リップなら褒める
                         if category == "リップ":
                             send_feedback(
                                 "今日も化粧してえらい！！",
