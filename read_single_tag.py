@@ -4,7 +4,7 @@ import termios
 import tty
 import pyperclip
 
-HID_DEVICE_PATH = "/dev/hidraw0"
+HID_DEVICE_PATH = "/dev/hidraw4"
 
 TAG_PREFIX = "E28"  # E280119..., E28011A... すべて対応
 VALID_LENGTHS = [22, 23]
