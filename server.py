@@ -10,8 +10,8 @@ import re
 # パス設定（相対パス問題を潰す）
 # ======================
 BASE_DIR = Path(__file__).resolve().parent
-DB_NAME = str(BASE_DIR / "rfid.db")
-CSV_MISSING_TAGS = str(BASE_DIR / "missing_tags.csv")
+DB_PATH = BASE_DIR / "rfid.db"
+CSV_MISSING_TAGS = BASE_DIR / "missing_tags.csv"
 
 # ======================
 # タグ仕様（統一）
