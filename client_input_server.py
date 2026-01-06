@@ -1,201 +1,232 @@
-import sys
-import tty
-import termios
-import csv
 import os
+import csv
 import time
 import requests
 from datetime import datetime
 
-# 定数定義
-CSV_DETECTED = "detected_tags.csv"
-CSV_USED = "used_items.csv"
-CSV_USED_ALL = "used_items_all.csv"
-TAG_LENGTHS = [22, 23]
-TAG_PREFIX = "E2180"
-CHECK_INTERVAL = 5
-INACTIVE_TIME = 10
+# ======================
+# 設定
+# ======================
+CSV_DETECTED = "rfid_detect_log.csv"               # 読み取れた瞬間の生ログ（時刻/ID/名前/カテゴリ）
+CSV_USED = "cosmetics_session_summary.csv"         # そのセッションで使用が確定した化粧品（重複なし）
+CSV_USED_ALL = "cosmetics_usage_durations.csv"     # 離席→復帰までの使用秒数ログ（全履歴）
 
-# 初期化：used_items.csv / used_items_all.csv を空にする
-def initialize_used_csvs():
-    with open(CSV_USED, mode='w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(["timestamp", "name"])
-    with open(CSV_USED_ALL, mode='w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(["timestamp", "name"])
+TAG_PREFIX = "E280"        # SR3308で出ている先頭
+TAG_LENGTHS = [23]         # SR3308の出力は23文字固定（例: E2801191A503066551E8A26）
+CHECK_INTERVAL = 5         # /tags の再取得間隔（秒）
+ABSENCE_THRESHOLD = 10     # 「未検出がこの秒数続いたら離席＝使用開始」と判定
 
-# 非表示でキー入力を取得（1文字）
-def get_hidden_key():
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
+# ======================
+# CSV 初期化（ヘッダだけ作る・既存は上書きしない）
+# ======================
+def ensure_csv_headers():
+    def touch(path, header):
+        new = not os.path.exists(path)
+        with open(path, "a", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(header)
+    touch(CSV_DETECTED, ["timestamp", "tag_id", "name", "category"])
+    touch(CSV_USED, ["timestamp", "name", "category"])
+    touch(CSV_USED_ALL, ["timestamp", "name", "duration(sec)"])
+
+# ======================
+# HID デバイス探索（接続されるまで待つ）
+# ======================
+def find_hid_device():
+    print("\n🔍 RFIDリーダー接続待ち… (電源を入れてください)")
+    while True:
+        for name in os.listdir("/dev"):
+            if not name.startswith("hidraw"):
+                continue
+            dev = f"/dev/{name}"
+            try:
+                # ここで開ける＝パーミッションOK＆存在
+                with open(dev, "rb"):
+                    print(f"\n✅ RFID リーダー検出: {dev}")
+                    return dev
+            except Exception:
+                continue
+        time.sleep(1)
+
+# ======================
+# HID（ASCII 1行）読み取り：SR3308はキーボードでASCII＋改行を送る
+# ======================
+def read_hid_line(hid_path):
+    """
+    リーダーは1タグ=ASCII文字列を連続送出し、最後に改行(\\r/\\n)。
+    それを丸ごと1行として受け取る。
+    """
     try:
-        tty.setraw(fd)
-        return sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        with open(hid_path, "rb") as hid:
+            buf = b""
+            while True:
+                b = hid.read(1)  # 1バイトずつ
+                if b in (b"\r", b"\n"):
+                    tag = buf.decode("ascii", errors="ignore").strip().upper()
+                    return tag
+                buf += b
+    except Exception:
+        print("⚠ RFID切断 → 再接続待ち")
+        return None
 
-def convert_full_and_kanji_to_halfwidth(s):
-    zenkaku = "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
-    hankaku = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    s = s.translate(str.maketrans(zenkaku, hankaku))
-    kanji_to_num = {
-        "〇": "0", "一": "1", "二": "2", "三": "3", "四": "4",
-        "五": "5", "六": "6", "七": "7", "八": "8", "九": "9"
-    }
-    for k, v in kanji_to_num.items():
-        s = s.replace(k, v)
-    return s
-
+# ======================
+# /tags を取得（tag_id → {name, category} の dict）
+# ======================
 def fetch_tags():
     try:
-        res = requests.get("http://localhost:8000/tags", timeout=3)
-        if res.status_code == 200:
-            return {
-                t["tag_id"]: {"name": t["name"], "category": t.get("category", "")}
-                for t in res.json()
-            }
-    except:
-        pass
+        r = requests.get("http://localhost:8000/tags", timeout=3)
+        if r.status_code == 200:
+            data = r.json()
+            return {t["tag_id"].strip().upper(): {"name": t["name"], "category": t.get("category", "")}
+                    for t in data}
+    except Exception as e:
+        print(f"⚠ /tags取得エラー: {e}")
     return {}
 
-def save_to_detected_csv(tag_id, name, category="") :
-    if not name:
-        return
-    new_file = not os.path.exists(CSV_DETECTED)
-    with open(CSV_DETECTED, 'a', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        if new_file:
-            writer.writerow(["timestamp", "tag_id", "name", "category"])
-        writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tag_id, name, category])
+# ======================
+# 検出ログを追記
+# ======================
+def log_detect(tag, name, category):
+    with open(CSV_DETECTED, "a", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tag, name, category])
 
-def save_to_used_csv(names, logged_names):
-    if not names:
-        return
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(CSV_USED, 'a', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        for name in names:
-            if name not in logged_names:
-                writer.writerow([timestamp, name])
-                logged_names.add(name)
-
-def save_to_used_all_csv(names):
-    if not names:
-        return
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(CSV_USED_ALL, 'a', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        for name in names:
-            writer.writerow([timestamp, name])
-
-def initialize_detected_tags_csv():
+# ======================
+# フィードバック（テキスト＋画像）をサーバへ送信
+# ======================
+def send_feedback(msg, img=None):
     try:
-        response = requests.get("http://localhost:8000/tags", timeout=3)
-        if response.status_code != 200:
-            print("[警告] サーバーからタグ一覧を取得できませんでした。")
-            return {}
-        tag_data = response.json()
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(CSV_DETECTED, mode='w', encoding='utf-8', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(["timestamp", "tag_id", "name", "category"])
-            for tag in tag_data:
-                writer.writerow([now_str, tag["tag_id"], tag["name"], tag["category"]])
-        return {tag["tag_id"]: {"name": tag["name"], "category": tag["category"]} for tag in tag_data}
+        requests.post("http://localhost:8000/feedback",
+                      json={"message": msg, "image": img}, timeout=3)
+        print(f"💬 褒め言葉送信: {msg} {('['+img+']') if img else ''}")
     except Exception as e:
-        print(f"[エラー] 初期化中にエラーが発生: {e}")
-        return {}
+        print(f"⚠ フィードバック送信失敗: {e}")
 
-def send_feedback(message=" 今日も化粧してえらい！！"):
-    try:
-        url = "http://localhost:8000/feedback"
-        response = requests.post(url, json={"message": message}, timeout=3)
-        if response.status_code == 200:
-            print("[送信成功] フィードバック送信:", message)
-        else:
-            print(f"[送信失敗] ステータスコード: {response.status_code}")
-    except Exception as e:
-        print(f"[送信エラー] フィードバック送信中に例外発生: {e}")
-
+# ======================
+# メイン
+# ======================
 def main():
-    initialize_used_csvs()
-    known_tags = initialize_detected_tags_csv()
-    print("=== RFIDタグ読み取りクライアント ===")
-    print("[待機] タグを読み取ると記録 / ESCまたはCtrl+Cで終了")
+    print("=== RFID Reader (SR3308 HID) START ===")
+    ensure_csv_headers()
 
-    buffer = ""
-    tag_id_to_info = {}
-    last_fetch = 0
-    logged_used = set()
+    # /tags からメタを持っておく
+    tags_meta = {}
+    last_meta_fetch = 0
 
-    current_time = time.time()
-    tags_last_seen = {tag_id: current_time for tag_id in known_tags.keys()}
+    # 各タグの状態管理
+    # state[tag_id] = {
+    #   "name": str, "category": str,
+    #   "is_present": bool,            # 直近は箱の中で検出され続けているか
+    #   "last_seen": float|None,       # 最後に検出した時刻（present時のみ更新）
+    #   "absent_since": float|None,    # 離席開始時刻（present→absentに落ちた瞬間）
+    #   "session_logged": bool         # セッション一覧（CSV_USED）にもう書いたか
+    # }
+    state = {}
 
-    # 🔽 追加：リップ読み取り記録用セット
-    recently_seen_lip_tags = set()
-    last_check_time = current_time
+    # まずは接続待ち
+    hid_path = find_hid_device()
 
-    try:
-        while True:
-            ch = get_hidden_key()
-            if ord(ch) == 27:
-                print("\n[終了] 終了します。")
-                break
+    while True:
+        # 接続後はループで読み取り
+        tag = read_hid_line(hid_path)
+        now = time.time()
 
-            if ch == '\r' or ch == '\n':
-                tag = convert_full_and_kanji_to_halfwidth(buffer.strip())
-                buffer = ""
+        # 抜き差し対応：切断時は再探索
+        if tag is None:
+            hid_path = find_hid_device()
+            continue
 
-                if tag.startswith(TAG_PREFIX) and len(tag) in TAG_LENGTHS:
-                    now = time.time()
+        # /tags の更新（一定間隔）
+        if now - last_meta_fetch > CHECK_INTERVAL or not tags_meta:
+            tags_meta = fetch_tags()
+            last_meta_fetch = now
+            # 新規・更新分を state に反映（name/category だけ）
+            for tid, meta in tags_meta.items():
+                s = state.get(tid)
+                if s:
+                    s["name"] = meta["name"]
+                    s["category"] = meta["category"]
+                else:
+                    state[tid] = {
+                        "name": meta["name"],
+                        "category": meta["category"],
+                        "is_present": False,
+                        "last_seen": None,
+                        "absent_since": None,
+                        "session_logged": False,
+                    }
 
-                    if now - last_fetch > CHECK_INTERVAL or not tag_id_to_info:
-                        tag_id_to_info = fetch_tags()
-                        last_fetch = now
+        # 受け取った1行を正規化
+        tag = tag.strip().upper()
+        # 一部の機種が末尾に余計な空白を混ぜるケースがあるので完全に除去
+        tag = "".join(ch for ch in tag if ch.isalnum())
 
-                    info = tag_id_to_info.get(tag)
-                    if info:
-                        name = info["name"]
-                        category = info.get("category", "")
-                        save_to_detected_csv(tag, name)
-                        tags_last_seen[tag] = now
+        # フォーマット判定
+        if not (tag.startswith(TAG_PREFIX) and len(tag) in TAG_LENGTHS):
+            # ここに来るなら未登録のゴミ/別デバイス入力
+            continue
 
-                        # 🔽 追加：リップカテゴリの読み取り記録
-                        if category == "リップ":
-                            recently_seen_lip_tags.add(tag)
+        # 未登録タグ？
+        if tag not in tags_meta:
+            print(f"⚠ 未登録タグ: {tag}")
+            continue
 
-                current_time = time.time()
+        # ここで「検出ログ」を毎回残す（視認性のため）
+        name = tags_meta[tag]["name"]
+        category = tags_meta[tag]["category"]
+        print(f"🎯 検出: {name} / {category}  ({tag})")
+        log_detect(tag, name, category)
 
-                # 🔽 チェック間隔が経過していたら未使用処理とリップ未検出処理を行う
-                if current_time - last_check_time > INACTIVE_TIME:
-                    inactive_names = []
-                    for t_id, data in tag_id_to_info.items():
-                        last_seen = tags_last_seen.get(t_id)
-                        if last_seen is None or current_time - last_seen > INACTIVE_TIME:
-                            inactive_names.append(data["name"])
+        # 状態を用意
+        if tag not in state:
+            state[tag] = {
+                "name": name, "category": category,
+                "is_present": False, "last_seen": None,
+                "absent_since": None, "session_logged": False
+            }
+        s = state[tag]
 
-                    save_to_used_csv(inactive_names, logged_used)
-                    save_to_used_all_csv(inactive_names)
+        # ─────────────────────────────────
+        # ① 検出イベント：present にする／last_seen 更新
+        # ─────────────────────────────────
+        if not s["is_present"]:
+            # 直前まで absent だった → いま戻ってきた（使用終了）
+            if s["absent_since"] is not None:
+                duration = int(now - s["absent_since"])
+                # 使用時間（離席→復帰）を記録
+                with open(CSV_USED_ALL, "a", encoding="utf-8", newline="") as f:
+                    csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                            s["name"], duration])
+                # セッション一覧（重複なし）
+                if not s["session_logged"]:
+                    with open(CSV_USED, "a", encoding="utf-8", newline="") as f:
+                        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                                s["name"], s["category"]])
+                    s["session_logged"] = True
 
-                    # リップ使用検出（未使用から）
-                    for name in inactive_names:
-                        for t_id, info in known_tags.items():
-                            if info["name"] == name and info.get("category") == "リップ":
-                                message = " 今日も化粧してえらい！！"
-                                print(message)
-                                send_feedback(message)
-                                break
+            s["is_present"] = True
+            s["absent_since"] = None
 
-                    # 🔁 記録をリセット
-                    recently_seen_lip_tags.clear()
-                    last_check_time = current_time
+        # 常に last_seen は更新（これが超重要）
+        s["last_seen"] = now
 
-            else:
-                buffer += ch
-
-    except KeyboardInterrupt:
-        print("\n[終了] Ctrl+Cが押されました。終了します。")
-
-if __name__ == "__main__":
-    main()
+        # ─────────────────────────────────
+        # ② 離席判定スイープ：全タグを見る（一定頻度）
+        #    → この処理は「読み取りの合間」でも走る必要があるため、
+        #      簡易的に“各検出の都度”軽く全タグを確認する
+        # ─────────────────────────────────
+        for tid, st in state.items():
+            # 登録されていない or まだ1回も見たことがない → 判定不能
+            if tid not in tags_meta or st["last_seen"] is None:
+                continue
+            # いま present かつ、一定時間見えていない → 離席に遷移
+            if st["is_present"] and (now - st["last_seen"] > ABSENCE_THRESHOLD):
+                st["is_present"] = False
+                st["absent_since"] = now
+                print(f"🚫 離席: {st['name']} / {st['category']}")
+                # リップならこの瞬間に褒め言葉（仕様：未検出になった時に出す）
+                if st["category"] == "リップ":
+                    send_feedback(
+                        "今日も化粧してえらい！！",
+                        "http://localhost:8000/static/imgs/ikemenn.png"
+                    )

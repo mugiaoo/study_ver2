@@ -10,6 +10,7 @@ app = Flask(__name__, template_folder='/home/pi/Desktop/study_ver2/templates')
 CORS(app)
 
 latest_feedback_message = ""
+latest_feedback_image = ""
 DB_NAME = "rfid.db"
 CSV_MISSING_TAGS = "missing_tags.csv"
 VALID_TAG_LENGTHS = [22,23]
@@ -222,59 +223,36 @@ def delete_tag():
         print(f"[エラー] タグ削除中に問題が発生: {e}")
         return f"削除中にエラーが発生しました: {e}", 500
     
-# @app.route("/feedback", methods=["POST"])
-# def receive_feedback():
-#     data = request.json
-#     message = data.get("message")
-    
-#     if not message:
-#         return jsonify({"error": "messageが空です"}), 400
-
-#     print(f"[フィードバック受信] {message}")  # サーバーのコンソールに出力
-
-#     global latest_feedback_message
-#     latest_feedback_message = message
-
-#     return jsonify({"status": "received"})
-
-# @app.route("/feedback", methods=["GET"])
-# def get_feedback():
-#     global latest_feedback_message
-#     # latest_feedback_messageが未定義なら空文字などを返す
-#     msg = latest_feedback_message if 'latest_feedback_message' in globals() else ""
-#     return jsonify({"message": msg})
-
-latest_feedback_message = None
 
 @app.route("/feedback", methods=["GET"])
 def get_feedback():
-    return jsonify({"message": latest_feedback_message or ""})
+    return jsonify({"message": latest_feedback_message or "", "image": latest_feedback_image or ""})
 
 @app.route("/feedback", methods=["POST"])
 def receive_feedback():
-    global latest_feedback_message
+    global latest_feedback_message, latest_feedback_image
     data = request.json
     latest_feedback_message = data.get("message", "")
+    latest_feedback_image = data.get("image", "")
     return jsonify({"status": "received"})
 
-# @app.route("/feedback", methods=["GET"])
-# def get_feedback():
-#     if latest_feedback_message:
-#         return jsonify({"message": latest_feedback_message})
-#     else:
-#         return jsonify({"message": ""})  # 空でも返す
 
-# @app.route("/feedback", methods=["POST"])
-# def receive_feedback():
-#     global latest_feedback_message
-#     data = request.json
-#     latest_feedback_message = data.get("message", "")
-#     return jsonify({"status": "received"})
+@app.route("/test-feedback")
+def test_feedback():
+    global latest_feedback_message, latest_feedback_image
+    latest_feedback_message = "今日も化粧してえらい！！"
+    latest_feedback_image = "/static/imgs/miniao.png"  # 任意
+    return jsonify({"status": "ok", "message": latest_feedback_message})
+
 
 
 @app.route("/display")
-def display():
-    return render_template("display.html")
+def show_display():
+    return render_template(
+        "display.html",
+        latest_feedback_message=latest_feedback_message or "",
+        latest_feedback_image=latest_feedback_image or ""
+    )
 
 if __name__ == "__main__":
     init_db()
