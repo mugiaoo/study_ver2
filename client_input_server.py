@@ -10,12 +10,12 @@ from pathlib import Path
 # パス（相対問題を潰す）
 # ======================
 BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "logs"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-CSV_DETECTED = str(BASE_DIR / "rfid_detect_log.csv")
-CSV_USED = str(BASE_DIR / "cosmetics_session_summary.csv")
-CSV_USED_ALL = str(BASE_DIR / "cosmetics_usage_durations.csv")
-# DATA_DIR = BASE_DIR / "logs"
-# DATA_DIR.mkdir(parents=True, exist_ok=True)
+CSV_DETECTED = str(DATA_DIR / "rfid_detect_log.csv")
+CSV_USED = str(DATA_DIR / "cosmetics_session_summary.csv")
+CSV_USED_ALL = str(DATA_DIR / "cosmetics_usage_durations.csv")
 
 # CSV_DETECTED = DATA_DIR / "rfid_detect_log.csv"
 # CSV_USED     = DATA_DIR / "cosmetics_session_summary.csv"
