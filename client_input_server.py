@@ -25,7 +25,7 @@ SERVER = "http://localhost:8000"
 # ======================
 # タグ仕様（serverと統一）
 # ======================
-TAG_PREFIX = "E28"
+TAG_PREFIXES = ("E218", "E280")
 VALID_TAG_LENGTHS = {22, 23}
 TAG_LENGTHS = VALID_TAG_LENGTHS  # 互換
 
@@ -45,7 +45,7 @@ def normalize_tag(tag: str) -> str:
 def is_valid_tag(tag: str) -> bool:
     if not tag:
         return False
-    if not tag.startswith(TAG_PREFIX):
+    if not tag.startswith(TAG_PREFIXES):
         return False
     if len(tag) not in VALID_TAG_LENGTHS:
         return False
