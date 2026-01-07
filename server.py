@@ -1,229 +1,187 @@
+#!/usr/bin/env python3
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 import sqlite3
 from datetime import datetime
-import csv
-import os
+from pathlib import Path
 import re
-from flask_cors import CORS
 
-app = Flask(__name__, template_folder='/home/pi/Desktop/study_ver2/templates')
+# ======================
+# パス設定（相対パス問題を潰す）
+# ======================
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "rfid.db"
+CSV_MISSING_TAGS = BASE_DIR / "missing_tags.csv"
+
+# ======================
+# タグ仕様（統一）
+# ======================
+TAG_PREFIX = "E28"                 # E280..., E281... なども通すため
+VALID_TAG_LENGTHS = {22, 23}       # 実機で出る長さに合わせる
+TAG_ALLOWED_RE = re.compile(r"^[0-9A-F]+$")  # 16進っぽい英数字のみ
+
+def normalize_tag(tag: str) -> str:
+    if tag is None:
+        return ""
+    t = tag.strip().upper()
+    # 空白や変な文字除去（念のため英数字のみ）
+    t = "".join(ch for ch in t if ch.isalnum()).upper()
+    return t
+
+def is_valid_tag(tag: str) -> bool:
+    if not tag:
+        return False
+    if not tag.startswith(TAG_PREFIX):
+        return False
+    if len(tag) not in VALID_TAG_LENGTHS:
+        return False
+    if not TAG_ALLOWED_RE.match(tag):
+        return False
+    return True
+
+# ======================
+# Flask
+# ======================
+app = Flask(__name__, template_folder=str(BASE_DIR / "templates"))
 CORS(app)
 
 latest_feedback_message = ""
 latest_feedback_image = ""
-DB_NAME = "rfid.db"
-CSV_MISSING_TAGS = "missing_tags.csv"
-VALID_TAG_LENGTHS = [22,23]
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH))
     c = conn.cursor()
-    #全てのタグ
+
+    # 登録タグ
     c.execute('''
         CREATE TABLE IF NOT EXISTS tags (
             tag_id TEXT PRIMARY KEY,
-            name TEXT,
-            category TEXT
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            created_at TEXT NOT NULL
         )
     ''')
-    #使用中のタグ
+
+    # 使用イベント（離席開始 / 復帰 / リップトリガなど）
     c.execute('''
-        CREATE TABLE IF NOT EXISTS usage_log (
+        CREATE TABLE IF NOT EXISTS usage_event (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tag_id TEXT,
-            timestamp TEXT
+            tag_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            event_type TEXT NOT NULL,     -- 'absent_start' | 'present_return' | 'lip_trigger'
+            timestamp TEXT NOT NULL,
+            duration_sec INTEGER          -- present_return 時に入る
         )
     ''')
+
     conn.commit()
     conn.close()
-    print("[DB] データベース初期化完了")
+    print(f"[DB] 初期化完了: {DB_PATH}")
 
+# ======================
+# API: タグ登録（JSON）
+# ======================
 @app.route("/register", methods=["POST"])
 def register_tag():
-    data = request.json
-    tag_id = data.get("tag_id")
-    name = data.get("name")
-    category = data.get("category")
+    data = request.json or {}
+    tag_id = normalize_tag(data.get("tag_id", ""))
+    name = (data.get("name") or "").strip()
+    category = (data.get("category") or "").strip()
 
-    print(f"[接続] /register にPOSTを受信 - tag_id: {tag_id}, name: {name}, category: {category}")
-
-    if not (tag_id and name and category) or len(tag_id) not in VALID_TAG_LENGTHS:
-        print("[警告] 不正な登録リクエスト")
+    if not (tag_id and name and category):
         return jsonify({"error": "tag_id, name, categoryが必要です"}), 400
     if any(re.search(r"\s", field) for field in [tag_id, name, category]):
         return jsonify({"error": "空白文字は含めないでください"}), 400
-    if len(tag_id) not in VALID_TAG_LENGTHS:
-        return jsonify({"error": f"tag_idは{VALID_TAG_LENGTHS}桁のみ対応しています"}), 400
-    
+    if not is_valid_tag(tag_id):
+        return jsonify({"error": f"tag_idが不正です（prefix={TAG_PREFIX}, len={sorted(VALID_TAG_LENGTHS)}）"}), 400
+
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(str(DB_PATH))
         c = conn.cursor()
-        c.execute("INSERT INTO tags (tag_id, name, category) VALUES (?, ?, ?)", (tag_id, name, category))
+        c.execute(
+            "INSERT INTO tags (tag_id, name, category, created_at) VALUES (?, ?, ?, ?)",
+            (tag_id, name, category, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
         conn.commit()
-        print(f"[登録] タグ {tag_id} をデータベースに登録")
         return jsonify({"status": "registered"})
     except sqlite3.IntegrityError:
-        print(f"[重複] タグ {tag_id} はすでに登録済み")
         return jsonify({"status": "already_registered"})
     except Exception as e:
-        print(f"[エラー] 登録中に問題が発生: {e}")
+        print("[ERROR] register:", e)
         return jsonify({"error": "internal server error"}), 500
     finally:
-        conn.close() 
-
-@app.route("/log", methods=["POST"])
-def log_usage():
-    data = request.json
-    tag_ids = data.get("tag_ids", [])
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[接続] /log にPOSTを受信 - タグ数: {len(tag_ids)}")
-
-    if not isinstance(tag_ids, list):
-        print("[警告] 不正なlogリクエスト")
-        return jsonify({"error": "tag_ids must be a list"}), 400
-
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-
-        c.execute("SELECT tag_id FROM tags")
-        all_registered ={row[0] for row in c.fetchall()}
-
-        used_now = set(tag_ids)
-        missing = all_registered - used_now
-
-        if missing:
-            if not os.path.exists(CSV_MISSING_TAGS):
-                with open(CSV_MISSING_TAGS, "w", newline='', encoding='utf-8') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["timestamp", "tag_id"])
-            with open(CSV_MISSING_TAGS, "a", newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                for tag in missing:
-                    writer.writerow([timestamp, tag])
-            print(f"[記録] 使用中（missing）タグ {len(missing)} 件をCSVに保存")
-
-        for tag_id in tag_ids:
-            if len(tag_id) not in VALID_TAG_LENGTHS:
-                print(f"[スキップ] タグ {tag_id} は長さが不正のため無視")
-                continue
-            c.execute("INSERT INTO usage_log (tag_id, timestamp) VALUES (?, ?)", (tag_id, timestamp))
-        conn.commit()
-        print(f"[記録] タグ使用ログを保存")
-        return jsonify({"status": "logged", "missing": list(missing)})
-    except Exception as e:
-        print(f"[エラー] ログ保存中に問題が発生: {e}")
-        return jsonify({"error": "internal server error"}), 500
-    finally:
+        try:
             conn.close()
+        except Exception:
+            pass
 
-@app.route("/register-ui", methods=["GET", "POST"])
-def register_ui():
-    message = ""
-    if request.method == "POST":
-        tag_id = request.form.get("tag_id", "").strip()
-        name = request.form.get("name", "").strip()
-        category = request.form.get("category", "").strip()
-        if not tag_id or not name or not category:
-            message = "すべての項目を入力してください。"
-        elif any(re.search(r'\s', field) for field in [tag_id, name, category]):
-            message = "各項目に空白文字を含めないでください。"    
-        elif len(tag_id) not in VALID_TAG_LENGTHS:
-            message = f"タグIDは{VALID_TAG_LENGTHS}文字で入力してください。"
-        else:
-            try:
-                conn = sqlite3.connect(DB_NAME)
-                c = conn.cursor()
-                c.execute("INSERT INTO tags (tag_id, name, category) VALUES (?, ?, ?)", (tag_id, name, category))
-                conn.commit()
-                message = f"タグ {tag_id} を登録しました。"
-            except sqlite3.IntegrityError:
-                message = "このタグはすでに登録されています。"
-            except Exception as e:
-                message = f"エラーが発生しました: {e}"
-            finally:
-                conn.close()
-
-    # 登録済みタグを取得してHTMLに渡す
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT * FROM tags")
-    tags = c.fetchall()
-    conn.close()
-    return render_template("register.html", message=message, tags=tags)
-    
+# ======================
+# API: 登録タグ一覧
+# ======================
 @app.route("/tags", methods=["GET"])
 def get_tags():
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(str(DB_PATH))
         c = conn.cursor()
-        c.execute("SELECT * FROM tags")
-        tags = c.fetchall()
-        conn.close()
-        print("[接続] /tags にGETを受信 - 登録タグ数:", len(tags))
-        return jsonify([{"tag_id": t[0], "name": t[1], "category": t[2]} for t in tags])
+        c.execute("SELECT tag_id, name, category FROM tags ORDER BY created_at DESC")
+        rows = c.fetchall()
+        return jsonify([
+            {"tag_id": r[0], "name": r[1], "category": r[2]}
+            for r in rows
+        ])
     except Exception as e:
-        print(f"[エラー] タグ取得中にエラー発生: {e}")
+        print("[ERROR] /tags:", e)
         return jsonify({"error": "internal server error"}), 500
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
-@app.route("/edit", methods=["POST"])
-def edit_tag():
-    tag_id = request.form.get("tag_id")
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT * FROM tags WHERE tag_id = ?", (tag_id,))
-    tag = c.fetchone()
-    conn.close()
-    if tag:
-        return render_template("edit.html", tag=tag, message="")
-    else:
-        return "指定されたタグが見つかりませんでした", 404
+# ======================
+# API: 使用イベント受信（クライアントから）
+# ======================
+@app.route("/usage-event", methods=["POST"])
+def usage_event():
+    data = request.json or {}
+    tag_id = normalize_tag(data.get("tag_id", ""))
+    name = (data.get("name") or "").strip()
+    category = (data.get("category") or "").strip()
+    event_type = (data.get("event_type") or "").strip()
+    duration_sec = data.get("duration_sec", None)
 
-@app.route("/update", methods=["POST"])
-def update_tag():
-    old_tag_id = request.form.get("old_tag_id")
-    new_tag_id = request.form.get("tag_id", "").strip()
-    name = request.form.get("name", "").strip()
-    category = request.form.get("category", "").strip()
+    if not (tag_id and name and category and event_type):
+        return jsonify({"error": "tag_id, name, category, event_typeが必要です"}), 400
+    if not is_valid_tag(tag_id):
+        return jsonify({"error": "invalid tag_id"}), 400
+    if event_type not in ("absent_start", "present_return", "lip_trigger"):
+        return jsonify({"error": "invalid event_type"}), 400
 
-    if not new_tag_id or not name or not category:
-        return render_template("edit.html", tag=(old_tag_id, name, category), message="すべての項目を入力してください。")
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(str(DB_PATH))
         c = conn.cursor()
-        # タグIDが変更された場合
-        if old_tag_id != new_tag_id:
-            c.execute("DELETE FROM tags WHERE tag_id = ?", (old_tag_id,))
-            c.execute("INSERT INTO tags (tag_id, name, category) VALUES (?, ?, ?)", (new_tag_id, name, category))
-        else:
-            c.execute("UPDATE tags SET name = ?, category = ? WHERE tag_id = ?", (name, category, old_tag_id))
+        c.execute(
+            "INSERT INTO usage_event (tag_id, name, category, event_type, timestamp, duration_sec) VALUES (?, ?, ?, ?, ?, ?)",
+            (tag_id, name, category, event_type, ts, int(duration_sec) if duration_sec is not None else None)
+        )
         conn.commit()
-        conn.close()
-        return register_ui()  # 編集完了後に登録画面に戻す
-    except sqlite3.IntegrityError:
-        return render_template("edit.html", tag=(old_tag_id, name, category), message="このタグIDはすでに存在します。")
+        return jsonify({"status": "ok"})
     except Exception as e:
-        return render_template("edit.html", tag=(old_tag_id, name, category), message=f"エラーが発生しました: {e}")
+        print("[ERROR] /usage-event:", e)
+        return jsonify({"error": "internal server error"}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
-@app.route("/delete", methods=["POST"])
-def delete_tag():
-    tag_id = request.form.get("tag_id")
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute("DELETE FROM tags WHERE tag_id = ?", (tag_id,))
-        conn.commit()
-        conn.close()
-        print(f"[削除] タグ {tag_id} を削除しました")
-        return register_ui()
-    except Exception as e:
-        print(f"[エラー] タグ削除中に問題が発生: {e}")
-        return f"削除中にエラーが発生しました: {e}", 500
-    
-
+# ======================
+# フィードバック（表示用）
+# ======================
 @app.route("/feedback", methods=["GET"])
 def get_feedback():
     return jsonify({"message": latest_feedback_message or "", "image": latest_feedback_image or ""})
@@ -231,20 +189,17 @@ def get_feedback():
 @app.route("/feedback", methods=["POST"])
 def receive_feedback():
     global latest_feedback_message, latest_feedback_image
-    data = request.json
-    latest_feedback_message = data.get("message", "")
-    latest_feedback_image = data.get("image", "")
+    data = request.json or {}
+    latest_feedback_message = data.get("message", "") or ""
+    latest_feedback_image = data.get("image", "") or ""
     return jsonify({"status": "received"})
-
 
 @app.route("/test-feedback")
 def test_feedback():
     global latest_feedback_message, latest_feedback_image
     latest_feedback_message = "今日も化粧してえらい！！"
-    latest_feedback_image = "/static/imgs/miniao.png"  # 任意
+    latest_feedback_image = "/static/imgs/ikemenn.png"
     return jsonify({"status": "ok", "message": latest_feedback_message})
-
-
 
 @app.route("/display")
 def show_display():
@@ -254,7 +209,74 @@ def show_display():
         latest_feedback_image=latest_feedback_image or ""
     )
 
+# ======================
+# 登録UI（HTMLフォーム）
+# ======================
+@app.route("/register-ui", methods=["GET", "POST"])
+def register_ui():
+    message = ""
+
+    if request.method == "POST":
+        tag_id = normalize_tag(request.form.get("tag_id", ""))
+        name = (request.form.get("name", "") or "").strip()
+        category = (request.form.get("category", "") or "").strip()
+
+        if not (tag_id and name and category):
+            message = "すべての項目を入力してください。"
+        elif any(re.search(r"\s", field) for field in [tag_id, name, category]):
+            message = "各項目に空白文字を含めないでください。"
+        elif not is_valid_tag(tag_id):
+            message = f"タグIDが不正です（prefix={TAG_PREFIX}, len={sorted(VALID_TAG_LENGTHS)}）"
+        else:
+            try:
+                conn = sqlite3.connect(str(DB_PATH))
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO tags (tag_id, name, category, created_at) VALUES (?, ?, ?, ?)",
+                    (tag_id, name, category, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                )
+                conn.commit()
+                message = f"タグ {tag_id} を登録しました。"
+            except sqlite3.IntegrityError:
+                message = "このタグはすでに登録されています。"
+            except Exception as e:
+                message = f"エラーが発生しました: {e}"
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    # 登録済みタグを表示
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+    c.execute("SELECT tag_id, name, category, created_at FROM tags ORDER BY created_at DESC")
+    tags = c.fetchall()
+    conn.close()
+    return render_template("register.html", message=message, tags=tags)
+
+@app.route("/delete", methods=["POST"])
+def delete_tag():
+    tag_id = normalize_tag(request.form.get("tag_id", ""))
+    if not tag_id:
+        return register_ui()
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        c = conn.cursor()
+        c.execute("DELETE FROM tags WHERE tag_id = ?", (tag_id,))
+        conn.commit()
+        return register_ui()
+    except Exception as e:
+        print("[ERROR] delete:", e)
+        return f"削除中にエラーが発生しました: {e}", 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
 if __name__ == "__main__":
     init_db()
-    print("[起動] Flaskサーバーを起動中... http://localhost:8000")
+    print("[起動] Flaskサーバー: http://0.0.0.0:8000")
+    print("[パス] DB:", DB_PATH)
     app.run(host="0.0.0.0", port=8000)

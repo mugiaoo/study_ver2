@@ -1,104 +1,178 @@
+#!/usr/bin/env python3
 import os
 import csv
 import time
 import requests
 from datetime import datetime
+from pathlib import Path
 
 # ======================
-# 設定
+# パス（相対問題を潰す）
 # ======================
-CSV_DETECTED = "rfid_detect_log.csv"               # 読み取れた瞬間の生ログ（時刻/ID/名前/カテゴリ）
-CSV_USED = "cosmetics_session_summary.csv"         # そのセッションで使用が確定した化粧品（重複なし）
-CSV_USED_ALL = "cosmetics_usage_durations.csv"     # 離席→復帰までの使用秒数ログ（全履歴）
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "logs"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-TAG_PREFIX = "E280"        # SR3308で出ている先頭
-TAG_LENGTHS = [23]         # SR3308の出力は23文字固定（例: E2801191A503066551E8A26）
-CHECK_INTERVAL = 5         # /tags の再取得間隔（秒）
-ABSENCE_THRESHOLD = 10     # 「未検出がこの秒数続いたら離席＝使用開始」と判定
+CSV_DETECTED = DATA_DIR / "rfid_detect_log.csv"
+CSV_USED = DATA_DIR / "cosmetics_session_summary.csv"
+CSV_USED_ALL = DATA_DIR / "cosmetics_usage_durations.csv"
 
 # ======================
-# CSV 初期化（ヘッダだけ作る・既存は上書きしない）
+# サーバ設定
+# ======================
+SERVER = "http://localhost:8000"
+
+# ======================
+# タグ仕様（serverと統一）
+# ======================
+TAG_PREFIXES = ("E218", "E280")
+VALID_TAG_LENGTHS = {22, 23}
+TAG_LENGTHS = VALID_TAG_LENGTHS  # 互換
+
+CHECK_INTERVAL = 5
+ABSENCE_THRESHOLD = 10
+
+# CSVを残したいなら True（DBだけで良いなら False）
+ENABLE_CSV = True
+
+def normalize_tag(tag: str) -> str:
+    if tag is None:
+        return ""
+    t = tag.strip().upper()
+    t = "".join(ch for ch in t if ch.isalnum()).upper()
+    return t
+
+def is_valid_tag(tag: str) -> bool:
+    if not tag:
+        return False
+    if not tag.startswith(TAG_PREFIXES):
+        return False
+    if len(tag) not in VALID_TAG_LENGTHS:
+        return False
+    return True
+
+# ======================
+# CSV 初期化
 # ======================
 def ensure_csv_headers():
-    def touch(path, header):
-        new = not os.path.exists(path)
+    if not ENABLE_CSV:
+        return
+    def touch(path: Path, header):
+        new = not path.exists()
         with open(path, "a", encoding="utf-8", newline="") as f:
             w = csv.writer(f)
             if new:
                 w.writerow(header)
+
     touch(CSV_DETECTED, ["timestamp", "tag_id", "name", "category"])
     touch(CSV_USED, ["timestamp", "name", "category"])
     touch(CSV_USED_ALL, ["timestamp", "name", "duration(sec)"])
 
+def log_csv_detect(tag, name, category):
+    if not ENABLE_CSV:
+        return
+    try:
+        with open(CSV_DETECTED, "a", encoding="utf-8", newline="") as f:
+            csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tag, name, category])
+    except Exception as e:
+        print("❌ CSV書き込み失敗:", CSV_DETECTED, e)
+
+def log_csv_used_once(name, category):
+    if not ENABLE_CSV:
+        return
+    try:
+        with open(CSV_USED, "a", encoding="utf-8", newline="") as f:
+            csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, category])
+    except Exception as e:
+        print("❌ CSV書き込み失敗:", CSV_USED, e)
+
+def log_csv_duration(name, duration):
+    if not ENABLE_CSV:
+        return
+    try:
+        with open(CSV_USED_ALL, "a", encoding="utf-8", newline="") as f:
+            csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, int(duration)])
+    except Exception as e:
+        print("❌ CSV書き込み失敗:", CSV_USED_ALL, e)
+
 # ======================
-# HID デバイス探索（接続されるまで待つ）
+# HID探索（/dev/hidraw*）
 # ======================
 def find_hid_device():
-    print("\n🔍 RFIDリーダー接続待ち… (電源を入れてください)")
+    print("\n🔍 RFIDリーダー接続待ち…")
     while True:
         for name in os.listdir("/dev"):
             if not name.startswith("hidraw"):
                 continue
             dev = f"/dev/{name}"
             try:
-                # ここで開ける＝パーミッションOK＆存在
                 with open(dev, "rb"):
-                    print(f"\n✅ RFID リーダー検出: {dev}")
+                    print(f"✅ RFID リーダー検出: {dev}")
                     return dev
             except Exception:
                 continue
         time.sleep(1)
 
-# ======================
-# HID（ASCII 1行）読み取り：SR3308はキーボードでASCII＋改行を送る
-# ======================
 def read_hid_line(hid_path):
     """
-    リーダーは1タグ=ASCII文字列を連続送出し、最後に改行(\\r/\\n)。
-    それを丸ごと1行として受け取る。
+    SR3308が「ASCII + 改行」を送る想定。
+    ただし機種差があるので、ここが合わない場合は read_single_tag.py方式(8byte HID report)へ切替。
     """
     try:
         with open(hid_path, "rb") as hid:
             buf = b""
             while True:
-                b = hid.read(1)  # 1バイトずつ
+                b = hid.read(1)
+                if not b:
+                    return None
                 if b in (b"\r", b"\n"):
                     tag = buf.decode("ascii", errors="ignore").strip().upper()
                     return tag
                 buf += b
     except Exception:
-        print("⚠ RFID切断 → 再接続待ち")
+        print("⚠ RFID切断 or 権限不足 → 再接続待ち")
         return None
 
 # ======================
-# /tags を取得（tag_id → {name, category} の dict）
+# サーバからタグ一覧取得
 # ======================
 def fetch_tags():
     try:
-        r = requests.get("http://localhost:8000/tags", timeout=3)
+        r = requests.get(f"{SERVER}/tags", timeout=3)
         if r.status_code == 200:
             data = r.json()
-            return {t["tag_id"].strip().upper(): {"name": t["name"], "category": t.get("category", "")}
-                    for t in data}
+            return {
+                normalize_tag(t["tag_id"]): {"name": t["name"], "category": t.get("category", "")}
+                for t in data
+            }
     except Exception as e:
         print(f"⚠ /tags取得エラー: {e}")
     return {}
 
 # ======================
-# 検出ログを追記
+# サーバへ使用イベント送信（DB記録）
 # ======================
-def log_detect(tag, name, category):
-    with open(CSV_DETECTED, "a", encoding="utf-8", newline="") as f:
-        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tag, name, category])
+def post_usage_event(tag_id, name, category, event_type, duration_sec=None):
+    payload = {
+        "tag_id": normalize_tag(tag_id),
+        "name": name,
+        "category": category,
+        "event_type": event_type,
+    }
+    if duration_sec is not None:
+        payload["duration_sec"] = int(duration_sec)
+    try:
+        requests.post(f"{SERVER}/usage-event", json=payload, timeout=3)
+    except Exception as e:
+        print(f"⚠ /usage-event 送信失敗: {e}")
 
 # ======================
-# フィードバック（テキスト＋画像）をサーバへ送信
+# フィードバック送信
 # ======================
 def send_feedback(msg, img=None):
     try:
-        requests.post("http://localhost:8000/feedback",
-                      json={"message": msg, "image": img}, timeout=3)
-        print(f"💬 褒め言葉送信: {msg} {('['+img+']') if img else ''}")
+        requests.post(f"{SERVER}/feedback", json={"message": msg, "image": img}, timeout=3)
+        print(f"💬 褒め送信: {msg}")
     except Exception as e:
         print(f"⚠ フィードバック送信失敗: {e}")
 
@@ -106,47 +180,40 @@ def send_feedback(msg, img=None):
 # メイン
 # ======================
 def main():
-    print("=== RFID Reader (SR3308 HID) START ===")
+    print("=== RFID Reader START ===")
+    print("CWD:", os.getcwd())
+    print("LOG DIR:", DATA_DIR)
     ensure_csv_headers()
 
-    # /tags からメタを持っておく
     tags_meta = {}
-    last_meta_fetch = 0
+    last_meta_fetch = 0.0
 
-    # 各タグの状態管理
-    # state[tag_id] = {
-    #   "name": str, "category": str,
-    #   "is_present": bool,            # 直近は箱の中で検出され続けているか
-    #   "last_seen": float|None,       # 最後に検出した時刻（present時のみ更新）
-    #   "absent_since": float|None,    # 離席開始時刻（present→absentに落ちた瞬間）
-    #   "session_logged": bool         # セッション一覧（CSV_USED）にもう書いたか
-    # }
+    # 状態
     state = {}
+    # state[tag_id] = {
+    #   name, category,
+    #   is_present: bool,
+    #   last_seen: float|None,
+    #   absent_since: float|None,
+    #   session_logged: bool
+    # }
 
-    # まずは接続待ち
     hid_path = find_hid_device()
 
     while True:
-        # 接続後はループで読み取り
-        tag = read_hid_line(hid_path)
+        tag_raw = read_hid_line(hid_path)
         now = time.time()
 
-        # 抜き差し対応：切断時は再探索
-        if tag is None:
+        if tag_raw is None:
             hid_path = find_hid_device()
             continue
 
-        # /tags の更新（一定間隔）
-        if now - last_meta_fetch > CHECK_INTERVAL or not tags_meta:
+        # タグ一覧更新
+        if (now - last_meta_fetch > CHECK_INTERVAL) or (not tags_meta):
             tags_meta = fetch_tags()
             last_meta_fetch = now
-            # 新規・更新分を state に反映（name/category だけ）
             for tid, meta in tags_meta.items():
-                s = state.get(tid)
-                if s:
-                    s["name"] = meta["name"]
-                    s["category"] = meta["category"]
-                else:
+                if tid not in state:
                     state[tid] = {
                         "name": meta["name"],
                         "category": meta["category"],
@@ -155,78 +222,82 @@ def main():
                         "absent_since": None,
                         "session_logged": False,
                     }
+                else:
+                    state[tid]["name"] = meta["name"]
+                    state[tid]["category"] = meta["category"]
 
-        # 受け取った1行を正規化
-        tag = tag.strip().upper()
-        # 一部の機種が末尾に余計な空白を混ぜるケースがあるので完全に除去
-        tag = "".join(ch for ch in tag if ch.isalnum())
+        tag = normalize_tag(tag_raw)
 
         # フォーマット判定
-        if not (tag.startswith(TAG_PREFIX) and len(tag) in TAG_LENGTHS):
-            # ここに来るなら未登録のゴミ/別デバイス入力
+        if not is_valid_tag(tag):
             continue
 
-        # 未登録タグ？
+        # 未登録は無視（登録UIで登録する）
         if tag not in tags_meta:
             print(f"⚠ 未登録タグ: {tag}")
             continue
 
-        # ここで「検出ログ」を毎回残す（視認性のため）
         name = tags_meta[tag]["name"]
         category = tags_meta[tag]["category"]
-        print(f"🎯 検出: {name} / {category}  ({tag})")
-        log_detect(tag, name, category)
 
-        # 状態を用意
+        # 検出ログ
+        print(f"🎯 検出: {name} / {category} ({tag})")
+        log_csv_detect(tag, name, category)
+
+        # state準備
         if tag not in state:
             state[tag] = {
                 "name": name, "category": category,
                 "is_present": False, "last_seen": None,
                 "absent_since": None, "session_logged": False
             }
+
         s = state[tag]
 
-        # ─────────────────────────────────
-        # ① 検出イベント：present にする／last_seen 更新
-        # ─────────────────────────────────
+        # ① present にする（absent→presentなら復帰＝使用終了）
         if not s["is_present"]:
-            # 直前まで absent だった → いま戻ってきた（使用終了）
             if s["absent_since"] is not None:
                 duration = int(now - s["absent_since"])
-                # 使用時間（離席→復帰）を記録
-                with open(CSV_USED_ALL, "a", encoding="utf-8", newline="") as f:
-                    csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                            s["name"], duration])
-                # セッション一覧（重複なし）
+
+                # CSV（任意）
+                log_csv_duration(s["name"], duration)
                 if not s["session_logged"]:
-                    with open(CSV_USED, "a", encoding="utf-8", newline="") as f:
-                        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                                s["name"], s["category"]])
+                    log_csv_used_once(s["name"], s["category"])
                     s["session_logged"] = True
+
+                # DB（必須：サーバに送る）
+                post_usage_event(tag, s["name"], s["category"], "present_return", duration_sec=duration)
 
             s["is_present"] = True
             s["absent_since"] = None
 
-        # 常に last_seen は更新（これが超重要）
+        # last_seen 更新
         s["last_seen"] = now
 
-        # ─────────────────────────────────
-        # ② 離席判定スイープ：全タグを見る（一定頻度）
-        #    → この処理は「読み取りの合間」でも走る必要があるため、
-        #      簡易的に“各検出の都度”軽く全タグを確認する
-        # ─────────────────────────────────
+        # ② 離席判定スイープ（各検出のたびに全タグ見る）
         for tid, st in state.items():
-            # 登録されていない or まだ1回も見たことがない → 判定不能
-            if tid not in tags_meta or st["last_seen"] is None:
+            if tid not in tags_meta:
                 continue
-            # いま present かつ、一定時間見えていない → 離席に遷移
+            if st["last_seen"] is None:
+                continue
+
             if st["is_present"] and (now - st["last_seen"] > ABSENCE_THRESHOLD):
                 st["is_present"] = False
                 st["absent_since"] = now
                 print(f"🚫 離席: {st['name']} / {st['category']}")
-                # リップならこの瞬間に褒め言葉（仕様：未検出になった時に出す）
+
+                # DB：離席開始
+                post_usage_event(tid, st["name"], st["category"], "absent_start")
+
+                # リップをトリガに褒める（仕様）
                 if st["category"] == "リップ":
+                    # DB：リップトリガも記録したいなら
+                    post_usage_event(tid, st["name"], st["category"], "lip_trigger")
+
                     send_feedback(
                         "今日も化粧してえらい！！",
-                        "http://localhost:8000/static/imgs/ikemenn.png"
+                        f"{SERVER}/static/imgs/ikemenn.png"
                     )
+
+if __name__ == "__main__":
+    main()
