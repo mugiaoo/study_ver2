@@ -3,36 +3,36 @@ import os
 import csv
 import time
 import requests
+import select
 from datetime import datetime
 from pathlib import Path
 
 # ======================
-# パス（相対問題を潰す）
+# パス（固定）
 # ======================
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "logs"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 CSV_DETECTED = DATA_DIR / "rfid_detect_log.csv"
-CSV_USED = DATA_DIR / "cosmetics_session_summary.csv"
+CSV_USED     = DATA_DIR / "cosmetics_session_summary.csv"
 CSV_USED_ALL = DATA_DIR / "cosmetics_usage_durations.csv"
 
 # ======================
-# サーバ設定
+# サーバ
 # ======================
 SERVER = "http://localhost:8000"
 
 # ======================
-# タグ仕様（serverと統一）
+# タグ仕様（E218/E280両対応）
 # ======================
 TAG_PREFIXES = ("E218", "E280")
 VALID_TAG_LENGTHS = {22, 23}
-TAG_LENGTHS = VALID_TAG_LENGTHS  # 互換
 
-CHECK_INTERVAL = 5
-ABSENCE_THRESHOLD = 10
+CHECK_INTERVAL = 5          # /tags再取得
+ABSENCE_THRESHOLD = 10      # 未検出で離席扱い
+SWEEP_INTERVAL = 1.0        # 入力が来なくても1秒ごとに離席判定
 
-# CSVを残したいなら True（DBだけで良いなら False）
 ENABLE_CSV = True
 
 def normalize_tag(tag: str) -> str:
@@ -52,11 +52,12 @@ def is_valid_tag(tag: str) -> bool:
     return True
 
 # ======================
-# CSV 初期化
+# CSV
 # ======================
 def ensure_csv_headers():
     if not ENABLE_CSV:
         return
+
     def touch(path: Path, header):
         new = not path.exists()
         with open(path, "a", encoding="utf-8", newline="") as f:
@@ -71,32 +72,23 @@ def ensure_csv_headers():
 def log_csv_detect(tag, name, category):
     if not ENABLE_CSV:
         return
-    try:
-        with open(CSV_DETECTED, "a", encoding="utf-8", newline="") as f:
-            csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tag, name, category])
-    except Exception as e:
-        print("❌ CSV書き込み失敗:", CSV_DETECTED, e)
+    with open(CSV_DETECTED, "a", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tag, name, category])
 
 def log_csv_used_once(name, category):
     if not ENABLE_CSV:
         return
-    try:
-        with open(CSV_USED, "a", encoding="utf-8", newline="") as f:
-            csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, category])
-    except Exception as e:
-        print("❌ CSV書き込み失敗:", CSV_USED, e)
+    with open(CSV_USED, "a", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, category])
 
 def log_csv_duration(name, duration):
     if not ENABLE_CSV:
         return
-    try:
-        with open(CSV_USED_ALL, "a", encoding="utf-8", newline="") as f:
-            csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, int(duration)])
-    except Exception as e:
-        print("❌ CSV書き込み失敗:", CSV_USED_ALL, e)
+    with open(CSV_USED_ALL, "a", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, int(duration)])
 
 # ======================
-# HID探索（/dev/hidraw*）
+# HID探索
 # ======================
 def find_hid_device():
     print("\n🔍 RFIDリーダー接続待ち…")
@@ -113,45 +105,73 @@ def find_hid_device():
                 continue
         time.sleep(1)
 
-def read_hid_line(hid_path):
+# ======================
+# 8byte HIDキーボード読み取り
+# ======================
+KEYMAP = {
+    0x1E: "1", 0x1F: "2", 0x20: "3", 0x21: "4",
+    0x22: "5", 0x23: "6", 0x24: "7", 0x25: "8",
+    0x26: "9", 0x27: "0",
+    0x04: "a", 0x05: "b", 0x06: "c", 0x07: "d",
+    0x08: "e", 0x09: "f", 0x0A: "g", 0x0B: "h",
+    0x0C: "i", 0x0D: "j", 0x0E: "k", 0x0F: "l",
+    0x10: "m", 0x11: "n", 0x12: "o", 0x13: "p",
+    0x14: "q", 0x15: "r", 0x16: "s", 0x17: "t",
+    0x18: "u", 0x19: "v", 0x1A: "w", 0x1B: "x",
+    0x1C: "y", 0x1D: "z",
+}
+
+def open_hid_nonblocking(hid_path: str):
+    # ノンブロッキングで開く（入力が来なくてもSWEEPを回すため）
+    fd = os.open(hid_path, os.O_RDONLY | os.O_NONBLOCK)
+    return fd
+
+def read_one_tag_from_fd(fd: int):
     """
-    SR3308が「ASCII + 改行」を送る想定。
-    ただし機種差があるので、ここが合わない場合は read_single_tag.py方式(8byte HID report)へ切替。
+    fdから読める分だけ読む（ノンブロッキング）。
+    Enter(0x28)が来たら1タグ確定して返す。
+    何も確定しなければNone。
     """
+    buf = getattr(read_one_tag_from_fd, "_buf", "")
     try:
-        with open(hid_path, "rb") as hid:
-            buf = b""
-            while True:
-                b = hid.read(1)
-                if not b:
-                    return None
-                if b in (b"\r", b"\n"):
-                    tag = buf.decode("ascii", errors="ignore").strip().upper()
-                    return tag
-                buf += b
-    except Exception:
-        print("⚠ RFID切断 or 権限不足 → 再接続待ち")
+        data = os.read(fd, 8)
+        # 読めない/データなし
+        if not data or len(data) < 3:
+            setattr(read_one_tag_from_fd, "_buf", buf)
+            return None
+
+        keycode = data[2]
+        if keycode in KEYMAP:
+            buf += KEYMAP[keycode].upper()
+        elif keycode == 0x28:  # Enter
+            tag = buf.strip().upper()
+            buf = ""
+            setattr(read_one_tag_from_fd, "_buf", buf)
+            return tag
+
+        setattr(read_one_tag_from_fd, "_buf", buf)
         return None
 
+    except BlockingIOError:
+        setattr(read_one_tag_from_fd, "_buf", buf)
+        return None
+    except OSError:
+        # 切断など
+        return "___HID_DISCONNECTED___"
+
 # ======================
-# サーバからタグ一覧取得
+# サーバ通信
 # ======================
 def fetch_tags():
     try:
         r = requests.get(f"{SERVER}/tags", timeout=3)
         if r.status_code == 200:
             data = r.json()
-            return {
-                normalize_tag(t["tag_id"]): {"name": t["name"], "category": t.get("category", "")}
-                for t in data
-            }
+            return {normalize_tag(t["tag_id"]): {"name": t["name"], "category": t.get("category", "")} for t in data}
     except Exception as e:
         print(f"⚠ /tags取得エラー: {e}")
     return {}
 
-# ======================
-# サーバへ使用イベント送信（DB記録）
-# ======================
 def post_usage_event(tag_id, name, category, event_type, duration_sec=None):
     payload = {
         "tag_id": normalize_tag(tag_id),
@@ -166,9 +186,6 @@ def post_usage_event(tag_id, name, category, event_type, duration_sec=None):
     except Exception as e:
         print(f"⚠ /usage-event 送信失敗: {e}")
 
-# ======================
-# フィードバック送信
-# ======================
 def send_feedback(msg, img=None):
     try:
         requests.post(f"{SERVER}/feedback", json={"message": msg, "image": img}, timeout=3)
@@ -177,7 +194,32 @@ def send_feedback(msg, img=None):
         print(f"⚠ フィードバック送信失敗: {e}")
 
 # ======================
-# メイン
+# 離席判定（入力がなくても回せるよう関数化）
+# ======================
+def sweep_absence(state, tags_meta, now):
+    for tid, st in state.items():
+        if tid not in tags_meta:
+            continue
+        if st["last_seen"] is None:
+            continue
+
+        if st["is_present"] and (now - st["last_seen"] > ABSENCE_THRESHOLD):
+            st["is_present"] = False
+            st["absent_since"] = now
+            print(f"🚫 離席: {st['name']} / {st['category']}")
+
+            post_usage_event(tid, st["name"], st["category"], "absent_start")
+
+            # リップ判定（表記揺れ対策）
+            if st["category"].strip() == "リップ":
+                post_usage_event(tid, st["name"], st["category"], "lip_trigger")
+                send_feedback(
+                    "今日も化粧してえらい！！",
+                    f"{SERVER}/static/imgs/ikemenn.png"
+                )
+
+# ======================
+# main
 # ======================
 def main():
     print("=== RFID Reader START ===")
@@ -187,31 +229,24 @@ def main():
 
     tags_meta = {}
     last_meta_fetch = 0.0
+    last_sweep = 0.0
 
-    # 状態
+    # state[tag_id] = {name, category, is_present, last_seen, absent_since, session_logged}
     state = {}
-    # state[tag_id] = {
-    #   name, category,
-    #   is_present: bool,
-    #   last_seen: float|None,
-    #   absent_since: float|None,
-    #   session_logged: bool
-    # }
 
     hid_path = find_hid_device()
+    fd = open_hid_nonblocking(hid_path)
+    print("✅ HID opened (non-blocking)")
 
     while True:
-        tag_raw = read_hid_line(hid_path)
         now = time.time()
 
-        if tag_raw is None:
-            hid_path = find_hid_device()
-            continue
-
-        # タグ一覧更新
+        # /tags 定期更新
         if (now - last_meta_fetch > CHECK_INTERVAL) or (not tags_meta):
             tags_meta = fetch_tags()
             last_meta_fetch = now
+
+            # stateに反映
             for tid, meta in tags_meta.items():
                 if tid not in state:
                     state[tid] = {
@@ -226,13 +261,35 @@ def main():
                     state[tid]["name"] = meta["name"]
                     state[tid]["category"] = meta["category"]
 
-        tag = normalize_tag(tag_raw)
+        # 入力がなくても定期スイープ
+        if now - last_sweep >= SWEEP_INTERVAL:
+            sweep_absence(state, tags_meta, now)
+            last_sweep = now
 
-        # フォーマット判定
-        if not is_valid_tag(tag):
+        # fdが読めるか（selectで待つ。短く待ってスイープ優先）
+        rlist, _, _ = select.select([fd], [], [], 0.2)
+        if not rlist:
             continue
 
-        # 未登録は無視（登録UIで登録する）
+        tag_raw = read_one_tag_from_fd(fd)
+        if tag_raw is None:
+            continue
+        if tag_raw == "___HID_DISCONNECTED___":
+            print("⚠ RFID切断 → 再接続待ち")
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+            hid_path = find_hid_device()
+            fd = open_hid_nonblocking(hid_path)
+            continue
+
+        tag = normalize_tag(tag_raw)
+        if not is_valid_tag(tag):
+            # デバッグしたいならここをprintしてもOK
+            continue
+
+        # 未登録タグは無視
         if tag not in tags_meta:
             print(f"⚠ 未登録タグ: {tag}")
             continue
@@ -240,7 +297,6 @@ def main():
         name = tags_meta[tag]["name"]
         category = tags_meta[tag]["category"]
 
-        # 検出ログ
         print(f"🎯 検出: {name} / {category} ({tag})")
         log_csv_detect(tag, name, category)
 
@@ -251,53 +307,24 @@ def main():
                 "is_present": False, "last_seen": None,
                 "absent_since": None, "session_logged": False
             }
-
         s = state[tag]
 
-        # ① present にする（absent→presentなら復帰＝使用終了）
+        # absent→present（復帰）
         if not s["is_present"]:
             if s["absent_since"] is not None:
                 duration = int(now - s["absent_since"])
 
-                # CSV（任意）
                 log_csv_duration(s["name"], duration)
                 if not s["session_logged"]:
                     log_csv_used_once(s["name"], s["category"])
                     s["session_logged"] = True
 
-                # DB（必須：サーバに送る）
                 post_usage_event(tag, s["name"], s["category"], "present_return", duration_sec=duration)
 
             s["is_present"] = True
             s["absent_since"] = None
 
-        # last_seen 更新
         s["last_seen"] = now
-
-        # ② 離席判定スイープ（各検出のたびに全タグ見る）
-        for tid, st in state.items():
-            if tid not in tags_meta:
-                continue
-            if st["last_seen"] is None:
-                continue
-
-            if st["is_present"] and (now - st["last_seen"] > ABSENCE_THRESHOLD):
-                st["is_present"] = False
-                st["absent_since"] = now
-                print(f"🚫 離席: {st['name']} / {st['category']}")
-
-                # DB：離席開始
-                post_usage_event(tid, st["name"], st["category"], "absent_start")
-
-                # リップをトリガに褒める（仕様）
-                if st["category"] == "リップ":
-                    # DB：リップトリガも記録したいなら
-                    post_usage_event(tid, st["name"], st["category"], "lip_trigger")
-
-                    send_feedback(
-                        "今日も化粧してえらい！！",
-                        f"{SERVER}/static/imgs/ikemenn.png"
-                    )
 
 if __name__ == "__main__":
     main()
