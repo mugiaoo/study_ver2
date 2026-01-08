@@ -20,18 +20,19 @@ TEMPLATE_DIR = BASE_DIR / "templates"
 # ======================
 FEEDBACK_MESSAGES = [
     "今日も化粧してえらい！！",
-    "めちゃくちゃ綺麗だよ。",
+    "今日も自分のために時間を使えてえらい！！",
     "その調子！今日も輝いてる！",
-    "ちゃんとケアしてて尊い…！",
+    "ちゃんと準備できたね！",
     "自分を大切にしてて素敵✨",
 ]
 
 # ★画像の候補（static/imgs に入れておいてね）
 FEEDBACK_IMAGES = [
-    "/static/imgs/ikemenn.png",
-    "/static/imgs/kawaii1.png",
-    "/static/imgs/kawaii2.png",
-    "/static/imgs/hero.png",
+    "/static/imgs/ikemen1.png",
+    "/static/imgs/ikemen2.png",
+    "/static/imgs/ikemen3.png",
+    "/static/imgs/ikemen4.png",
+    "/static/imgs/ikemen5.png",
 ]
 
 
