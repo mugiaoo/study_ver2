@@ -5,6 +5,8 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 import re
+import random
+
 
 # ======================
 # パス
@@ -12,6 +14,26 @@ import re
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "rfid.db"
 TEMPLATE_DIR = BASE_DIR / "templates"
+
+# ======================
+# ★褒め言葉の候補（好きなだけ追加OK）
+# ======================
+FEEDBACK_MESSAGES = [
+    "今日も化粧してえらい！！",
+    "めちゃくちゃ綺麗だよ。",
+    "その調子！今日も輝いてる！",
+    "ちゃんとケアしてて尊い…！",
+    "自分を大切にしてて素敵✨",
+]
+
+# ★画像の候補（static/imgs に入れておいてね）
+FEEDBACK_IMAGES = [
+    "/static/imgs/ikemenn.png",
+    "/static/imgs/kawaii1.png",
+    "/static/imgs/kawaii2.png",
+    "/static/imgs/hero.png",
+]
+
 
 # ======================
 # タグ処理：末尾5文字だけ使う
@@ -153,8 +175,10 @@ def scan():
 
     print(f"🎯 used: {name} / {category} (suffix={suffix})")
 
-    # リップならその場で褒める
+        # リップならその場で褒める（ランダム版）
     if category == "リップ":
+        global latest_feedback_message, latest_feedback_image
+
         print("💄 lip used -> feedback update")
         insert_usage_event(
             tag_id=suffix,
@@ -163,8 +187,15 @@ def scan():
             event_type="lip_trigger",
             duration_sec=None
         )
-        latest_feedback_message = "今日も化粧してえらい！！"
-        latest_feedback_image = "/static/imgs/ikemenn.png"
+
+        # ランダムにメッセージと画像を選ぶ
+        msg = random.choice(FEEDBACK_MESSAGES)
+        img = random.choice(FEEDBACK_IMAGES)
+
+        latest_feedback_message = msg
+        latest_feedback_image = img
+
+        print(f"[LIP] selected: '{msg}' ({img})")
 
     return jsonify({
         "status": "ok",
