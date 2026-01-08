@@ -4,8 +4,6 @@ from flask_cors import CORS
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-import threading
-import time
 import re
 
 # ======================
@@ -16,7 +14,7 @@ DB_PATH = BASE_DIR / "rfid.db"
 TEMPLATE_DIR = BASE_DIR / "templates"
 
 # ======================
-# タグ仕様（E218/E280 両対応）
+# タグ仕様（E218/E280両対応）
 # ======================
 TAG_PREFIXES = ("E218", "E280")
 VALID_TAG_LENGTHS = {22, 23}
@@ -41,12 +39,6 @@ def is_valid_tag(tag: str) -> bool:
     return True
 
 # ======================
-# 未検出(=使用)判定
-# ======================
-ABSENCE_THRESHOLD_SEC = 10
-SWEEP_INTERVAL_SEC = 1
-
-# ======================
 # Flask
 # ======================
 app = Flask(__name__, template_folder=str(TEMPLATE_DIR))
@@ -56,7 +48,7 @@ latest_feedback_message = ""
 latest_feedback_image = ""
 
 # ======================
-# DB
+# DBまわり
 # ======================
 def db_connect():
     return sqlite3.connect(str(DB_PATH))
@@ -66,6 +58,7 @@ def init_db():
     conn = db_connect()
     c = conn.cursor()
 
+    # タグ一覧
     c.execute("""
         CREATE TABLE IF NOT EXISTS tags (
             tag_id TEXT PRIMARY KEY,
@@ -75,13 +68,14 @@ def init_db():
         )
     """)
 
+    # 使用イベントログ
     c.execute("""
         CREATE TABLE IF NOT EXISTS usage_event (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tag_id TEXT NOT NULL,
             name TEXT NOT NULL,
             category TEXT NOT NULL,
-            event_type TEXT NOT NULL, -- detected / absent_start / present_return / lip_trigger
+            event_type TEXT NOT NULL,     -- 'used' / 'lip_trigger' など
             timestamp TEXT NOT NULL,
             duration_sec INTEGER
         )
@@ -92,6 +86,7 @@ def init_db():
     print(f"[DB] init ok: {DB_PATH}")
 
 def get_tags_meta():
+    """tag_id -> {name, category}"""
     conn = db_connect()
     c = conn.cursor()
     c.execute("SELECT tag_id, name, category FROM tags")
@@ -99,8 +94,8 @@ def get_tags_meta():
     conn.close()
     meta = {}
     for tid, name, cat in rows:
-        tid = normalize_tag(tid)
-        meta[tid] = {"name": name, "category": cat}
+        tid_norm = normalize_tag(tid)
+        meta[tid_norm] = {"name": name, "category": cat}
     return meta
 
 def insert_usage_event(tag_id, name, category, event_type, duration_sec=None):
@@ -115,103 +110,106 @@ def insert_usage_event(tag_id, name, category, event_type, duration_sec=None):
     conn.close()
 
 # ======================
-# 状態（Pi側で未検出判定する）
-# ======================
-state_lock = threading.Lock()
-state = {}
-# state[tag_id] = {is_present, last_seen, absent_since}
-
-def ensure_state_entry(tag_id):
-    if tag_id not in state:
-        state[tag_id] = {"is_present": False, "last_seen": None, "absent_since": None}
-
-# ======================
-# 未検出判定スレッド
-# ======================
-def sweep_loop():
-    global latest_feedback_message, latest_feedback_image
-    while True:
-        try:
-            tags_meta = get_tags_meta()
-            now = time.time()
-
-            with state_lock:
-                # 登録タグは state に持つ
-                for tid in tags_meta.keys():
-                    ensure_state_entry(tid)
-
-                for tid, st in state.items():
-                    if tid not in tags_meta:
-                        continue
-                    if st["last_seen"] is None:
-                        continue
-
-                    # present なのに一定時間検出がない => absent_start
-                    if st["is_present"] and (now - st["last_seen"] > ABSENCE_THRESHOLD_SEC):
-                        st["is_present"] = False
-                        st["absent_since"] = now
-
-                        name = tags_meta[tid]["name"]
-                        category = tags_meta[tid]["category"]
-                        print(f"🚫 absent_start: {name} / {category} ({tid})")
-                        insert_usage_event(tid, name, category, "absent_start")
-
-                        # リップでトリガ
-                        if category.strip() == "リップ":
-                            print("💄 lip_trigger -> feedback update")
-                            insert_usage_event(tid, name, category, "lip_trigger")
-                            latest_feedback_message = "今日も化粧してえらい！！"
-                            latest_feedback_image = "/static/imgs/ikemenn.png"
-        except Exception as e:
-            print("[SWEEP ERROR]", e)
-
-        time.sleep(SWEEP_INTERVAL_SEC)
-
-# ======================
-# Mac からの検出受信
+# Mac からの「ピッ」 = 使用トリガ
 # ======================
 @app.route("/scan", methods=["POST"])
 def scan():
+    """MacでRFIDリーダが読んだIDを受け取る。
+       1回の「ピッ」を1回の使用として扱う。
+       リップならその場で褒めフィードバックを更新。
+    """
+    global latest_feedback_message, latest_feedback_image
+
     data = request.json or {}
-    tag_id = normalize_tag(data.get("tag_id", ""))
+    tag_id_raw = data.get("tag_id", "")
+    tag_id = normalize_tag(tag_id_raw)
+
+    print(f"[SCAN] raw={tag_id_raw} -> norm={tag_id}")
 
     if not is_valid_tag(tag_id):
+        print("[SCAN] invalid tag")
         return jsonify({"error": "invalid tag_id"}), 400
 
     tags_meta = get_tags_meta()
     if tag_id not in tags_meta:
+        print("[SCAN] unregistered tag:", tag_id)
         return jsonify({"status": "ignored_unregistered", "tag_id": tag_id}), 200
 
     name = tags_meta[tag_id]["name"]
-    category = tags_meta[tag_id]["category"]
+    category = tags_meta[tag_id]["category"].strip()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    now = time.time()
-    with state_lock:
-        ensure_state_entry(tag_id)
-        st = state[tag_id]
+    # 1回の使用としてログ
+    insert_usage_event(
+        tag_id=tag_id,
+        name=name,
+        category=category,
+        event_type="used",
+        duration_sec=None
+    )
 
-        # detected を記録
-        st["last_seen"] = now
-        insert_usage_event(tag_id, name, category, "detected")
+    print(f"🎯 used: {name} / {category} ({tag_id})")
 
-        # absent -> present（復帰）
-        if not st["is_present"]:
-            if st["absent_since"] is not None:
-                duration = int(now - st["absent_since"])
-                insert_usage_event(tag_id, name, category, "present_return", duration_sec=duration)
-                st["absent_since"] = None
-            st["is_present"] = True
+    # リップならその場で褒める
+    if category == "リップ":
+        print("💄 lip used -> feedback update")
+        insert_usage_event(
+            tag_id=tag_id,
+            name=name,
+            category=category,
+            event_type="lip_trigger",
+            duration_sec=None
+        )
+        latest_feedback_message = "今日も化粧してえらい！！"
+        latest_feedback_image = "/static/imgs/ikemenn.png"
 
-    print(f"🎯 detected: {name} / {category} ({tag_id})")
-    return jsonify({"status": "ok", "tag_id": tag_id, "name": name, "category": category})
+    return jsonify({
+        "status": "ok",
+        "tag_id": tag_id,
+        "name": name,
+        "category": category,
+        "timestamp": now_str
+    })
 
 # ======================
-# 既存UI/API（最低限）
+# タグ関連API / UI
 # ======================
 @app.route("/tags", methods=["GET"])
 def tags():
     meta = get_tags_meta()
-    return jsonify([{"tag_id": tid, "name": v["name"], "category": v["category"]} for tid, v in meta.items()])
+    return jsonify([
+        {"tag_id": tid, "name": v["name"], "category": v["category"]}
+        for tid, v in meta.items()
+    ])
+
+@app.route("/register", methods=["POST"])
+def register_tag():
+    data = request.json or {}
+    tag_id = normalize_tag(data.get("tag_id", ""))
+    name = (data.get("name") or "").strip()
+    category = (data.get("category") or "").strip()
+
+    if not (tag_id and name and category):
+        return jsonify({"error": "tag_id, name, categoryが必要です"}), 400
+    if any(re.search(r"\s", field) for field in [tag_id, name, category]):
+        return jsonify({"error": "空白文字は含めないでください"}), 400
+    if not is_valid_tag(tag_id):
+        return jsonify({"error": f"tag_idが不正です（prefix={TAG_PREFIXES}, len={sorted(VALID_TAG_LENGTHS)}）"}), 400
+
+    try:
+        conn = db_connect()
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO tags (tag_id, name, category, created_at) VALUES (?, ?, ?, ?)",
+            (tag_id, name, category, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        conn.commit()
+        return jsonify({"status": "registered"})
+    except sqlite3.IntegrityError:
+        return jsonify({"status": "already_registered"})
+    finally:
+        try: conn.close()
+        except Exception: pass
 
 @app.route("/register-ui", methods=["GET", "POST"])
 def register_ui():
@@ -250,9 +248,25 @@ def register_ui():
     conn.close()
     return render_template("register.html", message=message, tags=tags_rows)
 
+@app.route("/delete", methods=["POST"])
+def delete_tag():
+    tag_id = normalize_tag(request.form.get("tag_id", ""))
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute("DELETE FROM tags WHERE tag_id = ?", (tag_id,))
+    conn.commit()
+    conn.close()
+    return register_ui()
+
+# ======================
+# フィードバック表示
+# ======================
 @app.route("/feedback", methods=["GET"])
 def feedback_get():
-    return jsonify({"message": latest_feedback_message or "", "image": latest_feedback_image or ""})
+    return jsonify({
+        "message": latest_feedback_message or "",
+        "image": latest_feedback_image or ""
+    })
 
 @app.route("/display")
 def display():
@@ -264,7 +278,5 @@ def display():
 
 if __name__ == "__main__":
     init_db()
-    th = threading.Thread(target=sweep_loop, daemon=True)
-    th.start()
     print("[RUN] http://0.0.0.0:8000")
     app.run(host="0.0.0.0", port=8000)
