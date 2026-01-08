@@ -5,7 +5,7 @@ import requests
 import re
 
 # ========= 設定 =========
-PI_SERVER = "http://raspberrypi.local:8000"  # ←PiのIPに変えてもOK（例 http://192.168.0.10:8000）
+PI_SERVER = "http://10.124.59.134:8000"  # ←PiのIPに変えてもOK（例 http://192.168.0.10:8000）
 TAG_PREFIXES = ("E218", "E280")
 VALID_TAG_LENGTHS = {22, 23}
 TAG_ALLOWED_RE = re.compile(r"^[0-9A-F]+$")
