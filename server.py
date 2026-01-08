@@ -2,7 +2,7 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import sqlite3
-from datetime_timezone import datetime
+from datetime import datetime
 from pathlib import Path
 import re
 
