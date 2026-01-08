@@ -2,7 +2,7 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import sqlite3
-from datetime import datetime
+from datetime_timezone import datetime
 from pathlib import Path
 import re
 
@@ -16,7 +16,7 @@ TEMPLATE_DIR = BASE_DIR / "templates"
 # ======================
 # タグ処理：末尾5文字だけ使う
 # ======================
-TAG_ALLOWED_RE = re.compile(r"^[0-9A-F]+$")  # 16進のような英数字だけ
+TAG_ALLOWED_RE = re.compile(r"^[0-9A-F]+$")  # 16進っぽい英数字
 
 def normalize_tag(tag: str) -> str:
     """フルIDを大文字英数字だけの文字列に正規化"""
@@ -31,7 +31,7 @@ def get_suffix(tag: str) -> str:
     t = normalize_tag(tag)
     if len(t) < 5:
         return ""
-    return t[-5:]  # 下5桁
+    return t[-5:]
 
 def is_valid_tag(tag: str) -> bool:
     """フルIDとしての最低限チェック（5文字以上の英数字）"""
@@ -62,7 +62,7 @@ def init_db():
     conn = db_connect()
     c = conn.cursor()
 
-    # tags.tag_id には「フルID」ではなく「末尾5文字」を保存する
+    # tags.tag_id には「末尾5文字」を保存
     c.execute("""
         CREATE TABLE IF NOT EXISTS tags (
             tag_id TEXT PRIMARY KEY,      -- 末尾5文字
@@ -78,7 +78,7 @@ def init_db():
             tag_id TEXT NOT NULL,         -- 末尾5文字
             name TEXT NOT NULL,
             category TEXT NOT NULL,
-            event_type TEXT NOT NULL,     -- 'used', 'lip_trigger', ...
+            event_type TEXT NOT NULL,     -- 'used', 'lip_trigger', など
             timestamp TEXT NOT NULL,
             duration_sec INTEGER
         )
@@ -117,7 +117,7 @@ def insert_usage_event(tag_id, name, category, event_type, duration_sec=None):
 @app.route("/scan", methods=["POST"])
 def scan():
     """MacでRFIDリーダが読んだフルIDを受け取る。
-       フルIDから末尾5文字を切り出して判定する。
+       フルIDから末尾5文字を切り出して判定。
        リップならその場で褒めフィードバックを更新。
     """
     global latest_feedback_message, latest_feedback_image
@@ -142,7 +142,7 @@ def scan():
     category = tags_meta[suffix]["category"].strip()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 1回の使用としてログ（suffix を tag_idとして保存）
+    # 1回の使用としてログ
     insert_usage_event(
         tag_id=suffix,
         name=name,
@@ -175,8 +175,17 @@ def scan():
     })
 
 # ======================
-# タグ登録API / UI
+# タグ関連API / UI
 # ======================
+@app.route("/tags", methods=["GET"])
+def tags():
+    """登録済みタグ一覧をJSONで返す（tag_id=末尾5文字）"""
+    meta = get_tags_meta()
+    return jsonify([
+        {"tag_id": tid, "name": v["name"], "category": v["category"]}
+        for tid, v in meta.items()
+    ])
+
 @app.route("/register", methods=["POST"])
 def register_tag():
     data = request.json or {}
