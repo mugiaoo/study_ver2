@@ -295,6 +295,69 @@ def register_ui():
     # tags_rows の tag_id は「末尾5文字」
     return render_template("register.html", message=message, tags=tags_rows)
 
+@app.route("/edit", methods=["POST"])
+def edit_tag():
+    """1つのタグを編集用フォームに表示する"""
+    suffix = (request.form.get("tag_id", "") or "").strip()
+    if not suffix:
+        return "タグIDが指定されていません。", 400
+
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute("SELECT tag_id, name, category FROM tags WHERE tag_id = ?", (suffix,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        return "指定されたタグが見つかりませんでした。", 404
+
+    # row = (tag_id, name, category)
+    return render_template("edit.html", tag=row, message="")
+
+@app.route("/update", methods=["POST"])
+def update_tag():
+    """編集フォームから送られてきた内容で name / category を更新"""
+    tag_id = (request.form.get("tag_id", "") or "").strip()
+    name = (request.form.get("name", "") or "").strip()
+    category = (request.form.get("category", "") or "").strip()
+
+    if not (tag_id and name and category):
+        # そのまま編集画面に戻す
+        return render_template(
+            "edit.html",
+            tag=(tag_id, name, category),
+            message="すべての項目を入力してください。"
+        )
+
+    # name, categoryにスペースを許容する/しないは好みで
+    # もし禁止したいなら↓を有効化
+    # if any(re.search(r"\s", field) for field in [name, category]):
+    #     return render_template(
+    #         "edit.html",
+    #         tag=(tag_id, name, category),
+    #         message="name, category に空白文字は含めないでください。"
+    #     )
+
+    try:
+        conn = db_connect()
+        c = conn.cursor()
+        c.execute(
+            "UPDATE tags SET name = ?, category = ? WHERE tag_id = ?",
+            (name, category, tag_id)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return render_template(
+            "edit.html",
+            tag=(tag_id, name, category),
+            message=f"更新中にエラーが発生しました: {e}"
+        )
+
+    # 更新後は登録画面に戻る
+    return register_ui()
+
+
 @app.route("/delete", methods=["POST"])
 def delete_tag():
     suffix = (request.form.get("tag_id", "") or "").strip()
