@@ -178,8 +178,6 @@ def scan():
 
         # リップならその場で褒める（ランダム版）
     if category == "リップ":
-        global latest_feedback_message, latest_feedback_image
-
         print("💄 lip used -> feedback update")
         insert_usage_event(
             tag_id=suffix,
@@ -329,14 +327,13 @@ def update_tag():
             message="すべての項目を入力してください。"
         )
 
-    # name, categoryにスペースを許容する/しないは好みで
-    # もし禁止したいなら↓を有効化
-    # if any(re.search(r"\s", field) for field in [name, category]):
-    #     return render_template(
-    #         "edit.html",
-    #         tag=(tag_id, name, category),
-    #         message="name, category に空白文字は含めないでください。"
-    #     )
+    # name, category に空白を入れたくない場合はこれを有効にする
+    if any(re.search(r"\s", field) for field in [name, category]):
+        return render_template(
+            "edit.html",
+            tag=(tag_id, name, category),
+            message="name, category に空白文字は含めないでください。"
+        )
 
     try:
         conn = db_connect()
@@ -356,6 +353,7 @@ def update_tag():
 
     # 更新後は登録画面に戻る
     return register_ui()
+
 
 
 @app.route("/delete", methods=["POST"])
