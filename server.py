@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 import random
+import time
 
 # ======================
 # パス
@@ -27,11 +28,11 @@ FEEDBACK_MESSAGES = [
 
 # ★画像の候補（static/imgs に入れておいてね）
 FEEDBACK_IMAGES = [
-    "/static/imgs/ikemen1.png",
+    # "/static/imgs/ikemen1.png",
     "/static/imgs/ikemen2.png",
-    "/static/imgs/ikemen3.png",
-    "/static/imgs/ikemen4.png",
-    "/static/imgs/ikemen5.png",
+    # "/static/imgs/ikemen3.png",
+    # "/static/imgs/ikemen4.png",
+    # "/static/imgs/ikemen5.png",
 ]
 
 # ======================
@@ -258,7 +259,7 @@ def scan():
     print(f"🎯 used: {name} / {category} (suffix={suffix})")
 
     # リップならその場で褒める（ランダム版）
-    if category == "チーク":
+    if category == "アイシャドウ":
         print("💄 lip used -> feedback update")
         insert_usage_event(
             tag_id=suffix,
@@ -267,6 +268,8 @@ def scan():
             event_type="lip_trigger",
             duration_sec=None
         )
+
+        time.sleep(10)
 
         # ランダムにメッセージと画像を選ぶ
         msg = random.choice(FEEDBACK_MESSAGES)
