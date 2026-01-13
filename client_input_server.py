@@ -3,7 +3,7 @@ import sys
 import requests
 import re
 
-PI_SERVER = "http://10.124.59.134:8000"  # PiのIP
+PI_SERVER = "http://10.124.59.224:8000"  # PiのIP
 TAG_PREFIXES = ("E218", "E280")
 VALID_TAG_LENGTHS = {22, 23}
 TAG_ALLOWED_RE = re.compile(r"^[0-9A-F]+$")
