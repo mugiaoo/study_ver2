@@ -258,7 +258,7 @@ def scan():
     print(f"🎯 used: {name} / {category} (suffix={suffix})")
 
     # リップならその場で褒める（ランダム版）
-    if category == "アイシャドウ":
+    if category == "リップ":
         print("💄 lip used -> feedback update")
         insert_usage_event(
             tag_id=suffix,
