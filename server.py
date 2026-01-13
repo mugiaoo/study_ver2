@@ -6,8 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 import random
-import time
-import threading
+
 
 # ======================
 # パス
@@ -261,9 +260,7 @@ def scan():
 
     # リップならその場で褒める（ランダム版）
     if category == "アイシャドウ":
-        print("💄 lip used -> schedule feedback in 5s")
-
-        # lip_trigger イベントを記録（これは即時でOK）
+        print("💄 lip used -> feedback update")
         insert_usage_event(
             tag_id=suffix,
             name=name,
@@ -272,17 +269,14 @@ def scan():
             duration_sec=None
         )
 
-    # ★ ここから：5秒後にメッセージ更新する別スレッド処理
-        def delayed_feedback():
-            time.sleep(5)
-            msg = random.choice(FEEDBACK_MESSAGES)
-            img = random.choice(FEEDBACK_IMAGES)
-            global latest_feedback_message, latest_feedback_image
-            latest_feedback_message = msg
-            latest_feedback_image = img
-            print(f"[LIP] feedback updated after 5s: {msg}, {img}")
+        # ランダムにメッセージと画像を選ぶ
+        msg = random.choice(FEEDBACK_MESSAGES)
+        img = random.choice(FEEDBACK_IMAGES)
 
-        threading.Thread(target=delayed_feedback, daemon=True).start()
+        latest_feedback_message = msg
+        latest_feedback_image = img
+
+        print(f"[LIP] selected: '{msg}' ({img})")
 
     return jsonify({
         "status": "ok",
@@ -291,6 +285,7 @@ def scan():
         "category": category,
         "timestamp": now_str
     })
+
 
 # ======================
 # 直近1セッションの可視化（JSON / HTML）
