@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 import re
 import random
-import time
 
 # ======================
 # パス
@@ -268,8 +267,6 @@ def scan():
             event_type="lip_trigger",
             duration_sec=None
         )
-
-        time.sleep(10)
 
         # ランダムにメッセージと画像を選ぶ
         msg = random.choice(FEEDBACK_MESSAGES)
