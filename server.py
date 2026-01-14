@@ -28,7 +28,8 @@ FEEDBACK_MESSAGES = [
 # ★画像の候補（static/imgs に入れておいてね）
 FEEDBACK_IMAGES = [
     # "/static/imgs/ikemen1.png",
-    "/static/imgs/ikemen2.png",
+    # "/static/imgs/ikemen2.png",
+    "/static/imgs/ikemen2-2.png",
     # "/static/imgs/ikemen3.png",
     # "/static/imgs/ikemen4.png",
     # "/static/imgs/ikemen5.png",
