@@ -19,8 +19,10 @@
     {% endif %}
 
     <form method="POST" action="/register-ui">
-        <label for="tag_id">タグID ({{ VALID_TAG_LENGTHS }}桁):</label><br>
-        <input type="text" id="tag_id" name="tag_id" required maxlength="{{ VALID_TAG_LENGTHS }}"><br>
+        <!-- フルIDを貼る前提に変更 -->
+        <label for="tag_id">タグID（リーダで読み取った文字列をそのまま貼り付け）:</label><br>
+        <input type="text" id="tag_id" name="tag_id" required><br>
+        <small>※ システム内部では末尾5文字のみを使用して識別します。</small><br><br>
 
         <label for="name">名前:</label><br>
         <input type="text" id="name" name="name" required><br>
@@ -35,7 +37,7 @@
     <table>
         <thead>
             <tr>
-                <th>タグID</th>
+                <th>タグID（末尾5桁）</th>
                 <th>名前</th>
                 <th>カテゴリ</th>
                 <th>操作</th> 
@@ -44,9 +46,10 @@
         <tbody>
             {% for tag in tags %}
             <tr>
-                <td>{{ tag[0] }}</td>
-                <td>{{ tag[1] }}</td>
-                <td>{{ tag[2] }}</td>
+                <!-- server.py 側で SELECT tag_id, name, category, created_at -->
+                <td>{{ tag[0] }}</td>  <!-- 末尾5桁 -->
+                <td>{{ tag[1] }}</td>  <!-- name -->
+                <td>{{ tag[2] }}</td>  <!-- category -->
                 <td style="white-space: nowrap; width: 100px;">
                     <form method="POST" action="/edit" style="display:inline;">
                         <input type="hidden" name="tag_id" value="{{ tag[0] }}">
@@ -59,7 +62,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="3">まだタグは登録されていません。</td></tr>
+            <tr><td colspan="4">まだタグは登録されていません。</td></tr>
             {% endfor %}
         </tbody>
     </table>
